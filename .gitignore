@@ -1,0 +1,14 @@
+# Secrets
+.env
+
+# Go build artifacts
+/pogo-bot
+*.exe
+*.test
+*.out
+vendor/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
