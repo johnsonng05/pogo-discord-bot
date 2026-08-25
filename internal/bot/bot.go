@@ -39,7 +39,36 @@ func New(cfg *config.Config) (*Bot, error) {
 		Session: session,
 		Scheduler: scheduler.New(session, cfg.AnnouncementChannelID, client),
 	}
+	
+	b.registerInteractionCreateHandler(session, cmds)
 
 	return b, nil
 }
 
+
+func (b *Bot) registerInteractionCreateHandler(session *discordgo.Session, commands *commands.Handler) {
+	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		commands.Route(s, i)
+	})
+}
+
+
+func (b *Bot) Start() error {
+	if err := b.Session.Open(); err != nil {
+		return fmt.Errorf("failed to open Discord session: %w", err)
+	}
+	_, err := b.Session.ApplicationCommandBulkOverwrite(
+		b.Session.State.User.ID,
+		"",
+		b.Commands.Definitions(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to register slash commands: %w", err)
+	}
+	return nil
+}
+
+
+func (b *Bot) Close() {
+	b.Session.Close()
+}
