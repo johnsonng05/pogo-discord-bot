@@ -19,7 +19,7 @@ The bot currently uses community-maintained JSON datasets:
 | Feature            | Data Source                                                                                          |
 | ------------------ | ---------------------------------------------------------------------------------------------------- |
 | Event schedules    | [Leek Duck via ScrapedDuck](https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.json) |
-| Raid bosses        | [pogoapi.net](https://pogoapi.net/api/v1/raid_bosses.json)                                           |
+| Raid bosses        | [Leek Duck via ScrapedDuck](https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/raids.json)  |
 | Pokémon stats      | [pogoapi.net](https://pogoapi.net/api/v1/pokemon_stats.json)                                         |
 | Pokémon moves      | [pogoapi.net](https://pogoapi.net/api/v1/current_pokemon_moves.json)                                 |
 | Type effectiveness | [pogoapi.net](https://pogoapi.net/api/v1/type_effectiveness.json)                                    |

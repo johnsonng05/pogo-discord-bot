@@ -22,28 +22,19 @@ func TestFetchRaidBosses(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
-    if raidBosses == nil {
-        t.Fatal("got nil raid bosses")
-    }
-    if len(raidBosses.Current) == 0 || len(raidBosses.Previous) == 0 {
-        t.Fatal("current/previous maps empty — check json tags")
+    if len(raidBosses) == 0 {
+        t.Fatal("got 0 raid bosses")
     }
 
-    // Individual tiers are often [] during a rotation. Only require that
-    // at least one current tier has bosses with mapped fields.
-    found := false
-    for _, bosses := range raidBosses.Current {
-        if len(bosses) == 0 {
-            continue
-        }
-        found = true
-        if bosses[0].Name == "" {
-            t.Fatalf("boss name empty — check json tags: %+v", bosses[0])
-        }
-        break
+    first := raidBosses[0]
+    if first.Name == "" || first.Tier == "" {
+        t.Fatalf("identity fields empty — check json tags: %+v", first)
     }
-    if !found {
-        t.Fatal("no current raid bosses in any tier")
+    if len(first.Types) == 0 || first.Types[0].Name == "" {
+        t.Fatalf("types empty — check json tags: %+v", first)
+    }
+    if first.CombatPower.Normal.Max == 0 {
+        t.Fatalf("combatPower empty — check json tags: %+v", first)
     }
 }
 

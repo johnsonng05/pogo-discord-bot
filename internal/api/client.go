@@ -13,7 +13,7 @@ import (
 // by the Pokémon GO community (see README.md → "Data Sources").
 const (
 	EventsURL            = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.json"
-	RaidBossesURL        = "https://pogoapi.net/api/v1/raid_bosses.json"
+	RaidBossesURL        = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/raids.json"
 	PokemonStatsURL      = "https://pogoapi.net/api/v1/pokemon_stats.json"
 	PokemonMovesURL      = "https://pogoapi.net/api/v1/current_pokemon_moves.json"
 	TypeEffectivenessURL = "https://pogoapi.net/api/v1/type_effectiveness.json"
@@ -75,12 +75,12 @@ func (c *Client) FetchEvents() ([]models.Event, error) {
 	return events, nil
 }
 
-// FetchRaidBosses downloads and decodes raid_bosses.json.
-func (c *Client) FetchRaidBosses() (*models.RaidBosses, error) {
+// FetchRaidBosses downloads and decodes ScrapedDuck raids.json.
+func (c *Client) FetchRaidBosses() ([]models.RaidBoss, error) {
 
-	raidBosses := &models.RaidBosses{}
+	raidBosses := []models.RaidBoss{}
 
-	if err := c.fetchData(RaidBossesURL, raidBosses); err != nil {
+	if err := c.fetchData(RaidBossesURL, &raidBosses); err != nil {
 		return nil, err
 	}
 

@@ -11,19 +11,35 @@ type Event struct {
 	Link string `json:"link"`
 }
 
-// RaidBosses is the parsing target for live raid tier bosses.
-
-type RaidBosses struct {
-	Current map[string][]RaidBoss `json:"current"`
-	Previous map[string][]RaidBoss `json:"previous"`
-}
+// RaidBoss is one entry from ScrapedDuck raids.json (Leek Duck).
 
 type RaidBoss struct {
-	Name string `json:"name"`
-	Type []string `json:"type"`
-	PossibleShiny bool `json:"possible_shiny"`
-	BoostedWeather []string `json:"boosted_weather"`
-	Form string `json:"form"`
+	Name           string        `json:"name"`
+	Tier           string        `json:"tier"`
+	CanBeShiny     bool          `json:"canBeShiny"`
+	Types          []NamedImage  `json:"types"`
+	CombatPower    CombatPower   `json:"combatPower"`
+	BoostedWeather []NamedImage  `json:"boostedWeather"`
+	Image          string        `json:"image"`
+}
+
+// NamedImage is a labeled asset (type or weather) with an icon URL.
+
+type NamedImage struct {
+	Name  string `json:"name"`
+	Image string `json:"image"`
+}
+
+// CombatPower is the catch CP range for normal and weather-boosted.
+
+type CombatPower struct {
+	Normal  CPRange `json:"normal"`
+	Boosted CPRange `json:"boosted"`
+}
+
+type CPRange struct {
+	Min int `json:"min"`
+	Max int `json:"max"`
 }
 
 // PokemonStats is one entry from the stats index.
