@@ -74,3 +74,51 @@ func (c *Client) FetchEvents() ([]models.Event, error) {
 
 	return events, nil
 }
+
+// FetchRaidBosses downloads and decodes raid_bosses.json.
+func (c *Client) FetchRaidBosses() (*models.RaidBosses, error) {
+
+	raidBosses := &models.RaidBosses{}
+
+	if err := c.fetchData(RaidBossesURL, raidBosses); err != nil {
+		return nil, err
+	}
+
+	return raidBosses, nil
+}
+
+// FetchPokemonStats downloads and decodes pokemon_stats.json.
+func (c *Client) FetchPokemonStats() ([]models.PokemonStats, error) {
+
+	pokemonStats := []models.PokemonStats{}
+
+	if err := c.fetchData(PokemonStatsURL, &pokemonStats); err != nil {
+		return nil, err
+	}
+
+	return pokemonStats, nil
+}
+
+// FetchPokemonMoves downloads and decodes current_pokemon_moves.json.
+func (c *Client) FetchPokemonMoves() ([]models.PokemonMoves, error) {
+
+	pokemonMoves := []models.PokemonMoves{}
+
+	if err := c.fetchData(PokemonMovesURL, &pokemonMoves); err != nil {
+		return nil, err
+	}
+
+	return pokemonMoves, nil
+}
+
+// FetchTypeEffectiveness downloads and decodes type_effectiveness.json.
+func (c *Client) FetchTypeEffectiveness() (*models.TypeEffectiveness, error) {
+	
+	typeEffectiveness := &models.TypeEffectiveness{}
+
+	if err := c.fetchData(TypeEffectivenessURL, typeEffectiveness); err != nil {
+		return nil, err
+	}
+
+	return typeEffectiveness, nil
+}
