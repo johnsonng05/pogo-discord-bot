@@ -9,9 +9,10 @@ import (
 // Command names registered with Discord. Keep these stable — changing a name
 // after users have the command in their client is a breaking change.
 const (
-	NameEvents = "pogo-events"
-	NameRaids  = "pogo-raids"
-	NameLookup = "pokemon-lookup"
+	NameCurrentEvents  = "pogo-current-events"
+	NameUpcomingEvents = "pogo-upcoming-events"
+	NameRaids          = "pogo-raids"
+	NameLookup         = "pokemon-lookup"
 )
 
 // Handler owns slash-command definitions and interaction routing.
@@ -29,8 +30,12 @@ func (h *Handler) Definitions() []*discordgo.ApplicationCommand {
 
 	commands := []*discordgo.ApplicationCommand{
 		{
-			Name:        NameEvents,
+			Name:        NameCurrentEvents,
 			Description: "Get the latest Pokemon Go events",
+		},
+		{
+			Name:        NameUpcomingEvents,
+			Description: "Get the upcoming Pokemon Go events",
 		},
 		{
 			Name:        NameRaids,
@@ -72,8 +77,10 @@ func (h *Handler) Route(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	// Dispatch to the appropriate handler
 	switch i.ApplicationCommandData().Name {
-	case NameEvents:
-		h.Events(s, i)
+	case NameCurrentEvents:
+		h.CurrentEvents(s, i)
+	case NameUpcomingEvents:
+		h.UpcomingEvents(s, i)
 	case NameRaids:
 		h.Raids(s, i)
 	case NameLookup:
