@@ -66,6 +66,10 @@ func (h *Handler) Raids(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			Color: tierColors[tier],
 		}
 
+		if bosses[0].Image != "" {
+			embed.Thumbnail = &discordgo.MessageEmbedThumbnail{URL: bosses[0].Image}
+		}
+
 		for _, pokemon := range bosses {
 			typeNames := make([]string, 0, len(pokemon.Types))
 			for _, t := range pokemon.Types {
