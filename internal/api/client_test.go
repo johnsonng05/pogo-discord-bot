@@ -119,4 +119,7 @@ func TestLookupPokemon(t *testing.T) {
 	if len(pokemonProfile.Types.Type) == 0 {
 		t.Fatalf("pokemonProfile fields empty — check json tags: %+v", pokemonProfile)
 	}
+	if pokemonProfile.GOImage == "" {
+		t.Fatalf("pokemonProfile fields empty — check json tags: %+v", pokemonProfile)
+	}
 }

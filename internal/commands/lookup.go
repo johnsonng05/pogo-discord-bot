@@ -35,6 +35,9 @@ func (h *Handler) Lookup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			{Name: "**Moves**", Value: fmt.Sprintf("Charged: %s\nFast: %s", strings.Join(pokemonProfile.Moves.ChargedMoves, ", "), strings.Join(pokemonProfile.Moves.FastMoves, ", "))},
 		},
 	}
+	if pokemonProfile.GOImage != "" {
+		embed.Thumbnail = &discordgo.MessageEmbedThumbnail{URL: pokemonProfile.GOImage}
+	}
 
 	s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 		Content: "Pokémon lookup successful.",

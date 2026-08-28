@@ -19,6 +19,7 @@ const (
 	PokemonMovesURL      = "https://pogoapi.net/api/v1/current_pokemon_moves.json"
 	PokemonTypesURL      = "https://pogoapi.net/api/v1/pokemon_types.json"
 	TypeEffectivenessURL = "https://pogoapi.net/api/v1/type_effectiveness.json"
+	PokedexAPIURL        = "https://pokemon-go-api.github.io/pokemon-go-api/api/pokedex.json"
 )
 
 // Client talks to the community datasets over HTTP.
@@ -133,6 +134,15 @@ func (c *Client) FetchTypeEffectiveness() (*models.TypeEffectiveness, error) {
 	return typeEffectiveness, nil
 }
 
+// FetchPokedexAPI downloads and decodes the gamemaster pokedex (includes GO icon URLs).
+func (c *Client) FetchPokedexAPI() ([]models.PokedexAPIEntry, error) {
+	entries := []models.PokedexAPIEntry{}
+	if err := c.fetchData(PokedexAPIURL, &entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
 // findStatsByName finds the first Normal form of the given Pokémon name.
 func findStatsByName(stats []models.PokemonStats, name string) (*models.PokemonStats, bool) {
 	var firstMatch *models.PokemonStats
@@ -173,7 +183,25 @@ func (c *Client) findTypes(types []models.PokemonTypes, name string, id int, for
 	return nil, false
 }
 
-// LookupPokemon fetches stats, moves, and types for the given Pokémon name.
+// grabGOImage finds a GO icon URL from pokemon-go-api for the given pokemon name and form.
+func grabGOImage(entries []models.PokedexAPIEntry, name, form string) string {
+	for i := range entries {
+		if !strings.EqualFold(entries[i].Names.English, name) {
+			continue
+		}
+		if form == "" || strings.EqualFold(form, "Normal") {
+			return entries[i].Assets.Image
+		}
+		for _, formSprite := range entries[i].AssetForms {
+			if formSprite.Form != nil && strings.EqualFold(*formSprite.Form, form) {
+				return formSprite.Image
+			}
+		}
+		return entries[i].Assets.Image
+	}
+	return ""
+}
+
 func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
 	pokemonStats, err := c.FetchPokemonStats()
 	if err != nil {
@@ -184,6 +212,10 @@ func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
 		return nil, err
 	}
 	pokemonTypes, err := c.FetchPokemonTypes()
+	if err != nil {
+		return nil, err
+	}
+	pokedexAPI, err := c.FetchPokedexAPI()
 	if err != nil {
 		return nil, err
 	}
@@ -202,8 +234,9 @@ func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
 	}
 
 	return &models.PokemonProfile{
-		Stats: *pokemon,
-		Moves: *move,
-		Types: *types,
+		Stats:   *pokemon,
+		Moves:   *move,
+		Types:   *types,
+		GOImage: grabGOImage(pokedexAPI, pokemon.PokemonName, pokemon.Form),
 	}, nil
 }

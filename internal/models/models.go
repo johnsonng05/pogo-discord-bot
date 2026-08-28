@@ -73,9 +73,26 @@ type PokemonTypes struct {
 }
 
 type PokemonProfile struct {
-	Stats PokemonStats
-	Moves PokemonMoves
-	Types PokemonTypes
+	Stats   PokemonStats
+	Moves   PokemonMoves
+	Types   PokemonTypes
+	GOImage string // GO icon from pokemon-go-api pokedex.json
+}
+
+// PokedexAPIEntry is one species from pokemon-go-api (gamemaster + asset URLs).
+type PokedexAPIEntry struct {
+	Names struct {
+		English string `json:"English"`
+	} `json:"names"`
+	Assets struct {
+		Image string `json:"image"`
+	} `json:"assets"`
+	AssetForms []AssetForm `json:"assetForms"`
+}
+
+type AssetForm struct {
+	Form  *string `json:"form"`
+	Image string  `json:"image"`
 }
 
 // TypeEffectiveness is the type-matchup matrix.
