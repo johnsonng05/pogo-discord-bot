@@ -4,7 +4,8 @@ A lightweight Discord bot written in Go using `[discordgo](https://github.com/bw
 
 ## Features
 
-- `/pogo-events` — View upcoming Pokémon GO events.
+- `/pogo-current-events` — View current Pokémon GO events.
+- `/pogo-upcoming-events` — View upcoming Pokémon GO events.
 - `/pogo-raids` — View currently active raid bosses.
 - `/pokemon-lookup` — Look up Pokémon stats, moves, and type effectiveness.
 - Daily automated event announcements at **8:00 AM**.
@@ -22,7 +23,9 @@ The bot currently uses community-maintained JSON datasets:
 | Raid bosses        | [Leek Duck via ScrapedDuck](https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/raids.json)  |
 | Pokémon stats      | [pogoapi.net](https://pogoapi.net/api/v1/pokemon_stats.json)                                         |
 | Pokémon moves      | [pogoapi.net](https://pogoapi.net/api/v1/current_pokemon_moves.json)                                 |
+| Pokémon types      | [pogoapi.net](https://pogoapi.net/api/v1/pokemon_types.json)                                         |
 | Type effectiveness | [pogoapi.net](https://pogoapi.net/api/v1/type_effectiveness.json)                                    |
+| Sprites            | [pokemon-go-api](https://pokemon-go-api.github.io/pokemon-go-api/api/pokedex.json)                   |
 
 These sources are community-maintained and may change or become unavailable over time.
 
@@ -70,19 +73,24 @@ The bot uses Discord slash commands, so `applications.commands` is required when
 ## Project Structure
 
 ```text
-pokemon/
+pogo-bot/
 ├── internal/
 │   ├── api/
-│        ├── client.go
+│   │   ├── client.go
+│   │   └── client_test.go
 │   ├── bot/
+│   │   └── bot.go
 │   ├── commands/
-│        ├── events.go
+│   │   ├── commands.go
+│   │   ├── events.go
+│   │   ├── lookup.go
+│   │   └── raids.go
 │   ├── config/
-│        ├── config.go
+│   │   └── config.go
 │   ├── models/
-│        ├──m odels.go
+│   │   └── models.go
 │   └── scheduler/
-│       ├── scheduler.go
+│       └── scheduler.go
 ├── go.mod
 ├── go.sum
 └── main.go
@@ -102,15 +110,24 @@ A background goroutine checks the server's local time every minute. At **8:00 AM
 
 ## Roadmap
 
-- [ ] Add an in-memory cache to reduce repeated API requests.
+- [ ] Add redis cache to reduce repeated API requests.
 - [ ] Add HTTP timeouts and improved error handling.
 - [ ] Add structured logging.
-- [ ] Complete `/pogo-events`.
+- [ ] Complete `/pogo-current-events`.
+- [ ] Complete `/pogo-upcoming-events`.
 - [ ] Complete `/pogo-raids`.
 - [ ] Complete `/pokemon-lookup`.
 - [ ] Add Pokémon type and moveset recommendations.
 - [ ] Improve Discord embeds and command responses.
 - [ ] Add tests for API parsing and command handlers.
+- [ ] Add Dockerfile and containerize the application.
+- [ ] Add Docker Compose configuration for local development.
+- [ ] Set up AWS EC2 instance for production deployment.
+- [ ] Deploy the Dockerized application to AWS EC2.
+- [ ] Document local development and production deployment.
+- [ ] Configure environment variables and secrets for deployment using AWS Systems Manager Parameter Store.
+- [ ] Configure Redis for production.
+- [ ] Set up application logging and monitoring on EC2.
 
 ## License
 
