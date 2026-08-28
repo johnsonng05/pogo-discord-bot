@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"pogo-bot/internal/models"
+	"strings"
 	"time"
 )
 
@@ -16,6 +17,7 @@ const (
 	RaidBossesURL        = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/raids.json"
 	PokemonStatsURL      = "https://pogoapi.net/api/v1/pokemon_stats.json"
 	PokemonMovesURL      = "https://pogoapi.net/api/v1/current_pokemon_moves.json"
+	PokemonTypesURL      = "https://pogoapi.net/api/v1/pokemon_types.json"
 	TypeEffectivenessURL = "https://pogoapi.net/api/v1/type_effectiveness.json"
 )
 
@@ -24,7 +26,6 @@ type Client struct {
 	Client  *http.Client
 	Timeout time.Duration
 }
-
 
 // New constructs a Client with a 10 second timeout.
 func New() *Client {
@@ -111,9 +112,18 @@ func (c *Client) FetchPokemonMoves() ([]models.PokemonMoves, error) {
 	return pokemonMoves, nil
 }
 
+// FetchPokemonTypes downloads and decodes pokemon_types.json.
+func (c *Client) FetchPokemonTypes() ([]models.PokemonTypes, error) {
+	pokemonTypes := []models.PokemonTypes{}
+	if err := c.fetchData(PokemonTypesURL, &pokemonTypes); err != nil {
+		return nil, err
+	}
+	return pokemonTypes, nil
+}
+
 // FetchTypeEffectiveness downloads and decodes type_effectiveness.json.
 func (c *Client) FetchTypeEffectiveness() (*models.TypeEffectiveness, error) {
-	
+
 	typeEffectiveness := &models.TypeEffectiveness{}
 
 	if err := c.fetchData(TypeEffectivenessURL, typeEffectiveness); err != nil {
@@ -121,4 +131,79 @@ func (c *Client) FetchTypeEffectiveness() (*models.TypeEffectiveness, error) {
 	}
 
 	return typeEffectiveness, nil
+}
+
+// findStatsByName finds the first Normal form of the given Pokémon name.
+func findStatsByName(stats []models.PokemonStats, name string) (*models.PokemonStats, bool) {
+	var firstMatch *models.PokemonStats
+	for i := range stats {
+		if !strings.EqualFold(stats[i].PokemonName, name) {
+			continue
+		}
+		if stats[i].Form == "Normal" {
+			return &stats[i], true
+		}
+		if firstMatch == nil {
+			firstMatch = &stats[i]
+		}
+	}
+	if firstMatch != nil {
+		return firstMatch, true
+	}
+	return nil, false
+}
+
+// findMoves finds the first match of the given Pokémon name, ID, and form.
+func (c *Client) findMoves(moves []models.PokemonMoves, name string, id int, form string) (*models.PokemonMoves, bool) {
+	for i, move := range moves {
+		if move.PokemonName == name && move.PokemonID == id && move.Form == form {
+			return &moves[i], true
+		}
+	}
+	return nil, false
+}
+
+// findTypes finds the first match of the given Pokémon name, ID, and form.
+func (c *Client) findTypes(types []models.PokemonTypes, name string, id int, form string) (*models.PokemonTypes, bool) {
+	for i, t := range types {
+		if t.PokemonName == name && t.PokemonID == id && t.Form == form {
+			return &types[i], true
+		}
+	}
+	return nil, false
+}
+
+// LookupPokemon fetches stats, moves, and types for the given Pokémon name.
+func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
+	pokemonStats, err := c.FetchPokemonStats()
+	if err != nil {
+		return nil, err
+	}
+	pokemonMoves, err := c.FetchPokemonMoves()
+	if err != nil {
+		return nil, err
+	}
+	pokemonTypes, err := c.FetchPokemonTypes()
+	if err != nil {
+		return nil, err
+	}
+
+	pokemon, ok := findStatsByName(pokemonStats, name)
+	if !ok {
+		return nil, fmt.Errorf("stats not found for %s", name)
+	}
+	move, ok := c.findMoves(pokemonMoves, pokemon.PokemonName, pokemon.PokemonID, pokemon.Form)
+	if !ok {
+		return nil, fmt.Errorf("moves not found for %s", name)
+	}
+	types, ok := c.findTypes(pokemonTypes, pokemon.PokemonName, pokemon.PokemonID, pokemon.Form)
+	if !ok {
+		return nil, fmt.Errorf("types not found for %s", name)
+	}
+
+	return &models.PokemonProfile{
+		Stats: *pokemon,
+		Moves: *move,
+		Types: *types,
+	}, nil
 }
