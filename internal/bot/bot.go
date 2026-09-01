@@ -6,6 +6,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 
 	"pogo-bot/internal/api"
+	"pogo-bot/internal/cache"
 	"pogo-bot/internal/commands"
 	"pogo-bot/internal/config"
 	"pogo-bot/internal/scheduler"
@@ -19,6 +20,7 @@ type Bot struct {
 	Config    *config.Config
 	Commands  *commands.Handler
 	Scheduler *scheduler.Scheduler
+	Cache     *cache.Cache
 }
 
 func New(cfg *config.Config) (*Bot, error) {
@@ -31,14 +33,19 @@ func New(cfg *config.Config) (*Bot, error) {
 
 	session.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuilds
 
+	rdb, err := cache.New(cfg.RedisURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Redis cache: %w", err)
+	}
 	client := api.New()
-	cmds := commands.New(client)
+	cmds := commands.New(client, rdb)
 
 	b := &Bot{
 		Config:    cfg,
 		Commands:  cmds,
 		Session:   session,
-		Scheduler: scheduler.New(session, cfg.AnnouncementChannelID, client),
+		Scheduler: scheduler.New(session, cfg.AnnouncementChannelID, client, rdb),
+		Cache:     rdb,
 	}
 
 	b.registerInteractionCreateHandler(session, cmds)
@@ -70,5 +77,6 @@ func (b *Bot) Start() error {
 
 func (b *Bot) Close() {
 	b.Scheduler.Stop()
+	b.Cache.Close()
 	b.Session.Close()
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 
 	"pogo-bot/internal/api"
+	"pogo-bot/internal/cache"
 )
 
 // Command names registered with Discord. Keep these stable — changing a name
@@ -17,11 +18,12 @@ const (
 
 // Handler owns slash-command definitions and interaction routing.
 type Handler struct {
-	API *api.Client
+	API   *api.Client
+	Cache *cache.Cache
 }
 
-func New(client *api.Client) *Handler {
-	return &Handler{API: client}
+func New(client *api.Client, rdb *cache.Cache) *Handler {
+	return &Handler{API: client, Cache: rdb}
 }
 
 // Definitions returns the global application-command payloads to register

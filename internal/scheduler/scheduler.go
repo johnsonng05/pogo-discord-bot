@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"pogo-bot/internal/api"
+	"pogo-bot/internal/cache"
 	"pogo-bot/internal/models"
 
 	"github.com/bwmarrin/discordgo"
@@ -32,16 +33,17 @@ type Scheduler struct {
 	stop       chan struct{}
 	stopOnce   sync.Once
 	TargetHour int
-	// Store *store.Store // TODO: load per-guild channels from Redis at post time
+	Cache      *cache.Cache
 }
 
-func New(session *discordgo.Session, channelID string, client *api.Client) *Scheduler {
+func New(session *discordgo.Session, channelID string, client *api.Client, rdb *cache.Cache) *Scheduler {
 	return &Scheduler{
 		Session:    session,
 		ChannelID:  channelID,
 		API:        client,
 		stop:       make(chan struct{}),
 		TargetHour: 8,
+		Cache:      rdb,
 	}
 }
 
