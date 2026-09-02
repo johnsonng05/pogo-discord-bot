@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -70,12 +71,14 @@ func (s *Scheduler) Run() {
 				continue
 			}
 
-			if s.ChannelID == "" {
-				log.Println("scheduler: ANNOUNCEMENT_CHANNEL_ID not set")
+			channels := s.announcementChannels()
+
+			if len(channels) == 0 {
+				log.Println("scheduler: no announcement channels configured")
 				continue
 			}
 
-			s.postDaily()
+			s.postDaily(channels)
 			lastPosted = today
 		}
 	}
@@ -90,7 +93,7 @@ func (s *Scheduler) Stop() {
 }
 
 // postDaily is a helper you can call from Run once the 08:00 condition matches.
-func (s *Scheduler) postDaily() {
+func (s *Scheduler) postDaily(channels []string) {
 	events, err := s.API.FetchEvents()
 	currentTime := time.Now().In(eventLocation())
 
@@ -129,10 +132,40 @@ func (s *Scheduler) postDaily() {
 		embed.Fields = fields
 	}
 
-	s.Session.ChannelMessageSendComplex(s.ChannelID, &discordgo.MessageSend{
+	dailyMessage := &discordgo.MessageSend{
 		Content: "☀️ **Daily Pokémon GO brief**",
 		Embeds:  []*discordgo.MessageEmbed{embed},
-	})
+	}
+
+	for _, channel := range channels {
+		s.Session.ChannelMessageSendComplex(channel, dailyMessage)
+	}
+}
+
+func (s *Scheduler) announcementChannels() []string {
+	seen := make(map[string]struct{})
+	var channels []string
+	if s.Cache != nil {
+		announcementChannels, err := s.Cache.ListAnnouncementChannels(context.Background())
+		if err != nil {
+			log.Printf("scheduler: list announcement channels: %v", err)
+		} else {
+			for _, channelID := range announcementChannels {
+				if channelID == "" {
+					continue
+				}
+				if _, ok := seen[channelID]; ok {
+					continue
+				}
+				seen[channelID] = struct{}{}
+				channels = append(channels, channelID)
+			}
+		}
+	}
+	if len(channels) == 0 && s.ChannelID != "" {
+		channels = append(channels, s.ChannelID)
+	}
+	return channels
 }
 
 func isExcludedEvent(event *models.Event) bool {
