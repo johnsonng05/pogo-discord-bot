@@ -37,7 +37,7 @@ func New(cfg *config.Config) (*Bot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Redis cache: %w", err)
 	}
-	client := api.New()
+	client := api.New(rdb)
 	cmds := commands.New(client, rdb)
 
 	b := &Bot{

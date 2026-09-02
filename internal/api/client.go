@@ -3,11 +3,17 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"pogo-bot/internal/cache"
 	"pogo-bot/internal/models"
 	"strings"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // Community JSON endpoints. Niantic has no public API; these are maintained
@@ -26,51 +32,73 @@ const (
 type Client struct {
 	Client  *http.Client
 	Timeout time.Duration
+	Cache   *cache.Cache
 }
 
 // New constructs a Client with a 10 second timeout.
-func New() *Client {
+func New(rdb *cache.Cache) *Client {
 	return &Client{
 		Client:  &http.Client{Timeout: 10 * time.Second},
 		Timeout: 10 * time.Second,
+		Cache:   rdb,
 	}
 }
 
-// fetchData downloads and decodes the data from the URL into the struct.
-func (c *Client) fetchData(url string, dest any) error {
-
+// fetchBytes downloads and returns the bytes from the given URL.
+func (c *Client) fetchBytes(url string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %s: %w", url, err)
+		return nil, fmt.Errorf("failed to create request: %s: %w", url, err)
 	}
-
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to execute request: %s: %w", url, err)
+		return nil, fmt.Errorf("failed to execute request: %s: %w", url, err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET %s: unexpected status %s", url, resp.Status)
+		return nil, fmt.Errorf("GET %s: unexpected status %s", url, resp.Status)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
-		return fmt.Errorf("failed to decode response body: %s: %w", url, err)
+	return io.ReadAll(resp.Body)
+}
+
+// fetchJSON retrieves JSON data from the cache or the given URL, caches successful
+// responses, and unmarshals the response into dest.
+func (c *Client) fetchJSON(cacheKey string, url string, dest any) error {
+	ctx := context.Background()
+	if c.Cache != nil {
+		cached, err := c.Cache.GetCached(ctx, cacheKey)
+		if err == nil {
+			log.Printf("cache hit %s", cacheKey)
+			return json.Unmarshal(cached, dest)
+		}
+		if !errors.Is(err, redis.Nil) {
+			log.Printf("cache get %s: %v", cacheKey, err)
+		}
 	}
-	return nil
+	body, err := c.fetchBytes(url)
+	if err != nil {
+		return err
+	}
+	if c.Cache != nil {
+		if err := c.Cache.SetCached(ctx, cacheKey, body, cache.DefaultTTL); err != nil {
+			log.Printf("cache set %s: %v", cacheKey, err)
+		}
+	}
+	return json.Unmarshal(body, dest)
 }
 
 // FetchEvents fetches events.json and decodes it into []models.Event.
-
 func (c *Client) FetchEvents() ([]models.Event, error) {
 
 	events := []models.Event{}
 
-	if err := c.fetchData(EventsURL, &events); err != nil {
+	if err := c.fetchJSON(cache.KeyEvents, EventsURL, &events); err != nil {
 		return nil, err
 	}
 
@@ -82,7 +110,7 @@ func (c *Client) FetchRaidBosses() ([]models.RaidBoss, error) {
 
 	raidBosses := []models.RaidBoss{}
 
-	if err := c.fetchData(RaidBossesURL, &raidBosses); err != nil {
+	if err := c.fetchJSON(cache.KeyRaids, RaidBossesURL, &raidBosses); err != nil {
 		return nil, err
 	}
 
@@ -94,7 +122,7 @@ func (c *Client) FetchPokemonStats() ([]models.PokemonStats, error) {
 
 	pokemonStats := []models.PokemonStats{}
 
-	if err := c.fetchData(PokemonStatsURL, &pokemonStats); err != nil {
+	if err := c.fetchJSON(cache.KeyPokemonStats, PokemonStatsURL, &pokemonStats); err != nil {
 		return nil, err
 	}
 
@@ -106,7 +134,7 @@ func (c *Client) FetchPokemonMoves() ([]models.PokemonMoves, error) {
 
 	pokemonMoves := []models.PokemonMoves{}
 
-	if err := c.fetchData(PokemonMovesURL, &pokemonMoves); err != nil {
+	if err := c.fetchJSON(cache.KeyPokemonMoves, PokemonMovesURL, &pokemonMoves); err != nil {
 		return nil, err
 	}
 
@@ -116,7 +144,7 @@ func (c *Client) FetchPokemonMoves() ([]models.PokemonMoves, error) {
 // FetchPokemonTypes downloads and decodes pokemon_types.json.
 func (c *Client) FetchPokemonTypes() ([]models.PokemonTypes, error) {
 	pokemonTypes := []models.PokemonTypes{}
-	if err := c.fetchData(PokemonTypesURL, &pokemonTypes); err != nil {
+	if err := c.fetchJSON(cache.KeyPokemonTypes, PokemonTypesURL, &pokemonTypes); err != nil {
 		return nil, err
 	}
 	return pokemonTypes, nil
@@ -127,7 +155,7 @@ func (c *Client) FetchTypeEffectiveness() (*models.TypeEffectiveness, error) {
 
 	typeEffectiveness := &models.TypeEffectiveness{}
 
-	if err := c.fetchData(TypeEffectivenessURL, typeEffectiveness); err != nil {
+	if err := c.fetchJSON(cache.KeyTypeEffectiveness, TypeEffectivenessURL, typeEffectiveness); err != nil {
 		return nil, err
 	}
 
@@ -137,7 +165,7 @@ func (c *Client) FetchTypeEffectiveness() (*models.TypeEffectiveness, error) {
 // FetchPokedexAPI downloads and decodes the gamemaster pokedex (includes GO icon URLs).
 func (c *Client) FetchPokedexAPI() ([]models.PokedexAPIEntry, error) {
 	entries := []models.PokedexAPIEntry{}
-	if err := c.fetchData(PokedexAPIURL, &entries); err != nil {
+	if err := c.fetchJSON(cache.KeyPokedex, PokedexAPIURL, &entries); err != nil {
 		return nil, err
 	}
 	return entries, nil
@@ -184,7 +212,7 @@ func (c *Client) findTypes(types []models.PokemonTypes, name string, id int, for
 }
 
 // grabGOImage finds a GO icon URL from pokemon-go-api for the given pokemon name and form.
-func grabGOImage(entries []models.PokedexAPIEntry, name, form string) string {
+func grabGOImage(entries []models.PokedexAPIEntry, name string, form string) string {
 	for i := range entries {
 		if !strings.EqualFold(entries[i].Names.English, name) {
 			continue

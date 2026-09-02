@@ -1,9 +1,15 @@
 package api
 
-import "testing"
+import (
+	"context"
+	"os"
+	"testing"
+
+	"pogo-bot/internal/cache"
+)
 
 func TestFetchEventsLive(t *testing.T) {
-	client := New()
+	client := New(nil) // nil cache — live HTTP tests skip Redis
 	events, err := client.FetchEvents()
 	if err != nil {
 		t.Fatal(err)
@@ -17,7 +23,7 @@ func TestFetchEventsLive(t *testing.T) {
 }
 
 func TestFetchRaidBosses(t *testing.T) {
-	client := New()
+	client := New(nil) // nil cache — live HTTP tests skip Redis
 	raidBosses, err := client.FetchRaidBosses()
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +45,7 @@ func TestFetchRaidBosses(t *testing.T) {
 }
 
 func TestFetchPokemonStats(t *testing.T) {
-	client := New()
+	client := New(nil) // nil cache — live HTTP tests skip Redis
 	pokemonStats, err := client.FetchPokemonStats()
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +59,7 @@ func TestFetchPokemonStats(t *testing.T) {
 }
 
 func TestFetchPokemonMoves(t *testing.T) {
-	client := New()
+	client := New(nil) // nil cache — live HTTP tests skip Redis
 	pokemonMoves, err := client.FetchPokemonMoves()
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +88,7 @@ func TestFetchPokemonMoves(t *testing.T) {
 }
 
 func TestFetchTypeEffectiveness(t *testing.T) {
-	client := New()
+	client := New(nil) // nil cache — live HTTP tests skip Redis
 	typeEffectiveness, err := client.FetchTypeEffectiveness()
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +99,7 @@ func TestFetchTypeEffectiveness(t *testing.T) {
 }
 
 func TestLookupPokemon(t *testing.T) {
-	client := New()
+	client := New(nil) // nil cache — live HTTP tests skip Redis
 	pokemonProfile, err := client.LookupPokemon("Pikachu")
 	if err != nil {
 		t.Fatal(err)
@@ -121,5 +127,70 @@ func TestLookupPokemon(t *testing.T) {
 	}
 	if pokemonProfile.GOImage == "" {
 		t.Fatalf("pokemonProfile fields empty — check json tags: %+v", pokemonProfile)
+	}
+}
+
+func TestFetchEventsCachesWithTTL(t *testing.T) {
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		t.Skip("REDIS_URL not set")
+	}
+
+	rdb, err := cache.New(redisURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rdb.Close()
+
+	ctx := context.Background()
+	if err := rdb.Delete(ctx, cache.KeyEvents); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rdb.Delete(ctx, cache.KeyEvents) })
+
+	client := New(rdb)
+
+	events, err := client.FetchEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("got 0 events")
+	}
+
+	remaining, err := rdb.TTL(ctx, cache.KeyEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remaining <= 0 {
+		t.Fatalf("expected positive TTL on %s, got %v", cache.KeyEvents, remaining)
+	}
+	if remaining > cache.DefaultTTL {
+		t.Fatalf("TTL %v exceeds DefaultTTL %v", remaining, cache.DefaultTTL)
+	}
+
+	// Second fetch should be a cache hit (key still present with TTL counting down).
+	eventsAgain, err := client.FetchEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(eventsAgain) != len(events) {
+		t.Fatalf("cached fetch length %d != first fetch %d", len(eventsAgain), len(events))
+	}
+
+	cached, err := rdb.GetCached(ctx, cache.KeyEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cached) == 0 {
+		t.Fatal("expected cached JSON bytes")
+	}
+
+	after, err := rdb.TTL(ctx, cache.KeyEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after <= 0 {
+		t.Fatalf("expected key to remain cached after second fetch, TTL=%v", after)
 	}
 }
