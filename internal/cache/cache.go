@@ -8,11 +8,18 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Redis key conventions:
-//   announcement:channels  — HASH: guildID → channelID (daily posts)
+// Redis key conventions
 
 const (
 	announcementChannelsKey = "announcement:channels"
+	KeyEvents               = "pogo:events"
+	KeyRaids                = "pogo:raids"
+	KeyPokemonStats         = "pogo:pokemon_stats"
+	KeyPokemonMoves         = "pogo:pokemon_moves"
+	KeyPokemonTypes         = "pogo:pokemon_types"
+	KeyTypeEffectiveness    = "pogo:type_effectiveness"
+	KeyPokedex              = "pogo:pokedex"
+	DefaultTTL              = 24 * time.Hour
 )
 
 // Cache persists guild settings and API response payloads in Redis.
@@ -44,6 +51,8 @@ func (c *Cache) Close() error {
 	return c.client.Close()
 }
 
+// --- Per-guild announcement channels (HASH announcement:channels) ---
+
 // SetAnnouncementChannel maps a guild to the channel that should receive daily posts.
 func (c *Cache) SetAnnouncementChannel(ctx context.Context, guildID, channelID string) error {
 	return c.client.HSet(ctx, announcementChannelsKey, guildID, channelID).Err()
@@ -57,4 +66,28 @@ func (c *Cache) GetAnnouncementChannel(ctx context.Context, guildID string) (str
 // ListAnnouncementChannels returns guildID → channelID for every configured server.
 func (c *Cache) ListAnnouncementChannels(ctx context.Context) (map[string]string, error) {
 	return c.client.HGetAll(ctx, announcementChannelsKey).Result()
+}
+
+// --- API response cache (STRING keys with TTL) ---
+
+// GetCached returns cached JSON bytes. redis.Nil means cache miss.
+func (c *Cache) GetCached(ctx context.Context, key string) ([]byte, error) {
+	return c.client.Get(ctx, key).Bytes()
+}
+
+// SetCached stores JSON bytes with a TTL.
+func (c *Cache) SetCached(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return c.client.Set(ctx, key, value, ttl).Err()
+}
+
+// --- API response cache methods for testing ---
+
+// TTL returns the remaining lifetime of a key.
+func (c *Cache) TTL(ctx context.Context, key string) (time.Duration, error) {
+	return c.client.TTL(ctx, key).Result()
+}
+
+// Delete removes one or more keys (useful in tests).
+func (c *Cache) Delete(ctx context.Context, keys ...string) error {
+	return c.client.Del(ctx, keys...).Err()
 }
