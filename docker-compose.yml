@@ -1,0 +1,29 @@
+# Local development only — production uses Upstash
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: pogo-discord-bot-redis
+    command: redis-server --save "" --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  bot:
+    build: .
+    container_name: pogo-discord-bot
+    env_file:
+      - .env
+    environment:
+      # Local self-hosted Redis (Compose service name). Production uses Upstash via SSM.
+      APP_ENV: development
+      REDIS_URL: redis://redis:6379/0
+      TZ: America/Los_Angeles
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
