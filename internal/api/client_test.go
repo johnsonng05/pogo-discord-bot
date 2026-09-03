@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"pogo-bot/internal/cache"
+	"pogo-discord-bot/internal/cache"
 )
 
 func TestFetchEventsLive(t *testing.T) {

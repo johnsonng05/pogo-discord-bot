@@ -8,8 +8,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"pogo-bot/internal/cache"
-	"pogo-bot/internal/models"
+	"pogo-discord-bot/internal/cache"
+	"pogo-discord-bot/internal/models"
 	"strings"
 	"time"
 

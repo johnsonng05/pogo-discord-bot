@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"pogo-bot/internal/bot"
-	"pogo-bot/internal/config"
+	"pogo-discord-bot/internal/bot"
+	"pogo-discord-bot/internal/config"
 )
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 		log.Fatalf("start: %v", err)
 	}
 
-	log.Println("pogo-bot is running. Press Ctrl+C to exit.")
+	log.Println("pogo-discord-bot is running. Press Ctrl+C to exit.")
 
 	// Block until SIGINT / SIGTERM so the process stays alive for the
 	// websocket and the background ticker.

@@ -5,11 +5,11 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 
-	"pogo-bot/internal/api"
-	"pogo-bot/internal/cache"
-	"pogo-bot/internal/commands"
-	"pogo-bot/internal/config"
-	"pogo-bot/internal/scheduler"
+	"pogo-discord-bot/internal/api"
+	"pogo-discord-bot/internal/cache"
+	"pogo-discord-bot/internal/commands"
+	"pogo-discord-bot/internal/config"
+	"pogo-discord-bot/internal/scheduler"
 )
 
 // Bot is the long-lived Discord session plus the two engines from the README:

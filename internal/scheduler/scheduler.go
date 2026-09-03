@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"pogo-bot/internal/api"
-	"pogo-bot/internal/cache"
-	"pogo-bot/internal/models"
+	"pogo-discord-bot/internal/api"
+	"pogo-discord-bot/internal/cache"
+	"pogo-discord-bot/internal/models"
 
 	"github.com/bwmarrin/discordgo"
 )

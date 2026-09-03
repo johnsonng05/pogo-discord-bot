@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"pogo-bot/internal/models"
+	"pogo-discord-bot/internal/models"
 
 	"github.com/bwmarrin/discordgo"
 )

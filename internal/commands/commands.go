@@ -3,8 +3,8 @@ package commands
 import (
 	"github.com/bwmarrin/discordgo"
 
-	"pogo-bot/internal/api"
-	"pogo-bot/internal/cache"
+	"pogo-discord-bot/internal/api"
+	"pogo-discord-bot/internal/cache"
 )
 
 // Command names registered with Discord. Keep these stable — changing a name
