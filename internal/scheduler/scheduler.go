@@ -43,7 +43,7 @@ func New(session *discordgo.Session, channelID string, client *api.Client, rdb *
 		ChannelID:  channelID,
 		API:        client,
 		stop:       make(chan struct{}),
-		TargetHour: 8,
+		TargetHour: 10,
 		Cache:      rdb,
 	}
 }
@@ -54,6 +54,7 @@ func (s *Scheduler) Run() {
 	defer ticker.Stop()
 
 	var lastPosted string
+	var lastCacheRefresh string
 	location := eventLocation()
 
 	for {
@@ -67,6 +68,12 @@ func (s *Scheduler) Run() {
 				continue
 			}
 			today := now.Format("2006-01-02")
+
+			if today != lastCacheRefresh {
+				s.refreshLiveCaches()
+				lastCacheRefresh = today
+			}
+
 			if today == lastPosted {
 				continue
 			}
@@ -82,6 +89,19 @@ func (s *Scheduler) Run() {
 			lastPosted = today
 		}
 	}
+}
+
+// refreshLiveCaches deletes events/raids keys so the next fetch is live.
+func (s *Scheduler) refreshLiveCaches() {
+	if s.Cache == nil {
+		return
+	}
+	ctx := context.Background()
+	if err := s.Cache.Delete(ctx, cache.KeyEvents, cache.KeyRaids); err != nil {
+		log.Printf("scheduler: morning cache refresh: %v", err)
+		return
+	}
+	log.Println("scheduler: refreshed live caches (events, raids)")
 }
 
 // Stop signals Run to exit. Safe to call from Bot.Close
