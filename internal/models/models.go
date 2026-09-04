@@ -76,7 +76,7 @@ type PokemonProfile struct {
 	Stats   PokemonStats
 	Moves   PokemonMoves
 	Types   PokemonTypes
-	GOImage string // GO icon from pokemon-go-api pokedex.json
+	GOImage string // GO icon URL from slim pogo:go_images cache (name → form → url).
 }
 
 // PokedexAPIEntry is one species from pokemon-go-api (gamemaster + asset URLs).

@@ -147,9 +147,10 @@ A background goroutine wakes every minute. At 8:00 AM PT it loads announcement c
 | `pogo:pokemon_moves`      | String + TTL | Cached moves JSON       |
 | `pogo:pokemon_types`      | String + TTL | Cached types JSON       |
 | `pogo:type_effectiveness` | String + TTL | Cached matchup JSON     |
-| `pogo:pokedex`            | String + TTL | Cached pokedex JSON     |
+| `pogo:go_images`          | String + TTL | Slim name→form→GO icon URL map (not full pokedex) |
 
-Default TTL: **24 hours**.
+Default TTL: **24 hours** (events, raids, stats, etc.).  
+`pogo:go_images` TTL: **30 days** (icon URLs change rarely).
 
 ## Project structure
 

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"pogo-discord-bot/internal/cache"
@@ -44,31 +43,33 @@ func New(rdb *cache.Cache) *Client {
 	}
 }
 
-// fetchBytes downloads and returns the bytes from the given URL.
-func (c *Client) fetchBytes(url string) ([]byte, error) {
+// decodeJSON GETs url and streams the body into dest with json.Decoder.
+func (c *Client) decodeJSON(url string, dest any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %s: %w", url, err)
+		return fmt.Errorf("failed to create request: %s: %w", url, err)
 	}
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %s: %w", url, err)
+		return fmt.Errorf("failed to execute request: %s: %w", url, err)
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: unexpected status %s", url, resp.Status)
+		return fmt.Errorf("GET %s: unexpected status %s", url, resp.Status)
 	}
 
-	return io.ReadAll(resp.Body)
+	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+		return fmt.Errorf("decode %s: %w", url, err)
+	}
+	return nil
 }
 
-// fetchJSON retrieves JSON data from the cache or the given URL, caches successful
-// responses, and unmarshals the response into dest.
+// fetchJSON retrieves JSON from Redis or the given URL, streaming the HTTP
+// response into dest on a miss, then caching a marshaled copy of dest.
 func (c *Client) fetchJSON(cacheKey string, url string, dest any) error {
 	ctx := context.Background()
 	if c.Cache != nil {
@@ -81,16 +82,18 @@ func (c *Client) fetchJSON(cacheKey string, url string, dest any) error {
 			log.Printf("cache get %s: %v", cacheKey, err)
 		}
 	}
-	body, err := c.fetchBytes(url)
-	if err != nil {
+	if err := c.decodeJSON(url, dest); err != nil {
 		return err
 	}
 	if c.Cache != nil {
-		if err := c.Cache.SetCached(ctx, cacheKey, body, cache.DefaultTTL); err != nil {
+		payload, err := json.Marshal(dest)
+		if err != nil {
+			log.Printf("cache marshal %s: %v", cacheKey, err)
+		} else if err := c.Cache.SetCached(ctx, cacheKey, payload, cache.DefaultTTL); err != nil {
 			log.Printf("cache set %s: %v", cacheKey, err)
 		}
 	}
-	return json.Unmarshal(body, dest)
+	return nil
 }
 
 // FetchEvents fetches events.json and decodes it into []models.Event.
@@ -162,13 +165,41 @@ func (c *Client) FetchTypeEffectiveness() (*models.TypeEffectiveness, error) {
 	return typeEffectiveness, nil
 }
 
-// FetchPokedexAPI downloads and decodes the gamemaster pokedex (includes GO icon URLs).
-func (c *Client) FetchPokedexAPI() ([]models.PokedexAPIEntry, error) {
-	entries := []models.PokedexAPIEntry{}
-	if err := c.fetchJSON(cache.KeyPokedex, PokedexAPIURL, &entries); err != nil {
+// FetchGOImages returns a slim nested map: pokemon name → form → GO icon URL.
+func (c *Client) FetchGOImages() (map[string]map[string]string, error) {
+	ctx := context.Background()
+	if c.Cache != nil {
+		cached, err := c.Cache.GetCached(ctx, cache.KeyGOImages)
+		if err == nil {
+			var images map[string]map[string]string
+			if err := json.Unmarshal(cached, &images); err == nil {
+				log.Printf("cache hit %s", cache.KeyGOImages)
+				return images, nil
+			}
+			log.Printf("cache get %s: corrupt payload: %v", cache.KeyGOImages, err)
+			if err := c.Cache.Delete(ctx, cache.KeyGOImages); err != nil {
+				log.Printf("corrupt cache delete %s: %v", cache.KeyGOImages, err)
+			}
+		} else if !errors.Is(err, redis.Nil) {
+			log.Printf("cache get %s: %v", cache.KeyGOImages, err)
+		}
+	}
+
+	var entries []models.PokedexAPIEntry
+	if err := c.decodeJSON(PokedexAPIURL, &entries); err != nil {
 		return nil, err
 	}
-	return entries, nil
+	images := buildGOImageMap(entries)
+
+	if c.Cache != nil {
+		payload, err := json.Marshal(images)
+		if err != nil {
+			log.Printf("cache marshal %s: %v", cache.KeyGOImages, err)
+		} else if err := c.Cache.SetCached(ctx, cache.KeyGOImages, payload, cache.GOImagesTTL); err != nil {
+			log.Printf("cache set %s: %v", cache.KeyGOImages, err)
+		}
+	}
+	return images, nil
 }
 
 // findStatsByName finds the first Normal form of the given Pokémon name.
@@ -211,23 +242,56 @@ func (c *Client) findTypes(types []models.PokemonTypes, name string, id int, for
 	return nil, false
 }
 
-// grabGOImage finds a GO icon URL from pokemon-go-api for the given pokemon name and form.
-func grabGOImage(entries []models.PokedexAPIEntry, name string, form string) string {
+// normalizeGOImageName lowercases a Pokémon name for map keys.
+func normalizeGOImageName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// normalizeGOImageForm lowercases a form key; empty / Normal become "normal".
+func normalizeGOImageForm(form string) string {
+	if form == "" || strings.EqualFold(form, "Normal") {
+		return "normal"
+	}
+	return strings.ToLower(form)
+}
+
+// buildGOImageMap reduces the full pokedex to name → form → icon URL.
+func buildGOImageMap(entries []models.PokedexAPIEntry) map[string]map[string]string {
+	images := make(map[string]map[string]string, len(entries))
 	for i := range entries {
-		if !strings.EqualFold(entries[i].Names.English, name) {
+		name := normalizeGOImageName(entries[i].Names.English)
+		if name == "" {
 			continue
 		}
-		if form == "" || strings.EqualFold(form, "Normal") {
-			return entries[i].Assets.Image
+		forms, ok := images[name]
+		if !ok {
+			forms = make(map[string]string)
+			images[name] = forms
+		}
+		if entries[i].Assets.Image != "" {
+			forms["normal"] = entries[i].Assets.Image
 		}
 		for _, formSprite := range entries[i].AssetForms {
-			if formSprite.Form != nil && strings.EqualFold(*formSprite.Form, form) {
-				return formSprite.Image
+			if formSprite.Form == nil || *formSprite.Form == "" || formSprite.Image == "" {
+				continue
 			}
+			forms[normalizeGOImageForm(*formSprite.Form)] = formSprite.Image
 		}
-		return entries[i].Assets.Image
 	}
-	return ""
+	return images
+}
+
+// grabGOImage finds a GO icon URL for the given pokemon name and form.
+// Unknown forms fall back to the default (normal) icon when present.
+func grabGOImage(images map[string]map[string]string, name string, form string) string {
+	forms := images[normalizeGOImageName(name)]
+	if forms == nil {
+		return ""
+	}
+	if img, ok := forms[normalizeGOImageForm(form)]; ok {
+		return img
+	}
+	return forms["normal"]
 }
 
 func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
@@ -243,7 +307,7 @@ func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	pokedexAPI, err := c.FetchPokedexAPI()
+	goImages, err := c.FetchGOImages()
 	if err != nil {
 		return nil, err
 	}
@@ -265,6 +329,6 @@ func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
 		Stats:   *pokemon,
 		Moves:   *move,
 		Types:   *types,
-		GOImage: grabGOImage(pokedexAPI, pokemon.PokemonName, pokemon.Form),
+		GOImage: grabGOImage(goImages, pokemon.PokemonName, pokemon.Form),
 	}, nil
 }

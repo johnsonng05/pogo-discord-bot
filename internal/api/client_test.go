@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"pogo-discord-bot/internal/cache"
+	"pogo-discord-bot/internal/models"
 )
 
 func TestFetchEventsLive(t *testing.T) {
@@ -127,6 +128,85 @@ func TestLookupPokemon(t *testing.T) {
 	}
 	if pokemonProfile.GOImage == "" {
 		t.Fatalf("pokemonProfile fields empty — check json tags: %+v", pokemonProfile)
+	}
+}
+
+func TestBuildGOImageMapAndGrab(t *testing.T) {
+	fall := "FALL_2019"
+	entries := []models.PokedexAPIEntry{
+		{
+			Names:  struct{ English string `json:"English"` }{English: "Pikachu"},
+			Assets: struct{ Image string `json:"image"` }{Image: "https://example.com/pikachu.png"},
+			AssetForms: []models.AssetForm{
+				{Form: &fall, Image: "https://example.com/pikachu-fall.png"},
+			},
+		},
+	}
+
+	images := buildGOImageMap(entries)
+	if got := grabGOImage(images, "pikachu", "Normal"); got != "https://example.com/pikachu.png" {
+		t.Fatalf("normal form: got %q", got)
+	}
+	if got := grabGOImage(images, "Pikachu", "Fall_2019"); got != "https://example.com/pikachu-fall.png" {
+		t.Fatalf("named form: got %q", got)
+	}
+	if forms := images["pikachu"]; forms["normal"] == "" || forms["fall_2019"] == "" {
+		t.Fatalf("expected nested form keys, got %#v", forms)
+	}
+	if got := grabGOImage(images, "Pikachu", "Unknown_Form"); got != "https://example.com/pikachu.png" {
+		t.Fatalf("fallback: got %q", got)
+	}
+	if got := grabGOImage(images, "MissingNo", "Normal"); got != "" {
+		t.Fatalf("missing: got %q", got)
+	}
+}
+
+func TestFetchGOImagesCachesSlimPayload(t *testing.T) {
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		t.Skip("REDIS_URL not set")
+	}
+
+	rdb, err := cache.New(redisURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rdb.Close()
+
+	ctx := context.Background()
+	if err := rdb.Delete(ctx, cache.KeyGOImages); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rdb.Delete(ctx, cache.KeyGOImages) })
+
+	client := New(rdb)
+	images, err := client.FetchGOImages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(images) == 0 {
+		t.Fatal("got 0 go images")
+	}
+	if img := grabGOImage(images, "Pikachu", "Normal"); img == "" {
+		t.Fatal("expected Pikachu icon URL")
+	}
+
+	cached, err := rdb.GetCached(ctx, cache.KeyGOImages)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Full pokedex is ~14MB; slim map must stay under Upstash's 10MB request limit.
+	const maxBytes = 2 * 1024 * 1024
+	if len(cached) > maxBytes {
+		t.Fatalf("cached go_images too large: %d bytes (limit %d)", len(cached), maxBytes)
+	}
+
+	again, err := client.FetchGOImages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again) != len(images) {
+		t.Fatalf("cache hit size %d != first fetch %d", len(again), len(images))
 	}
 }
 

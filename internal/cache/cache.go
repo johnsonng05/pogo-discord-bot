@@ -18,8 +18,9 @@ const (
 	KeyPokemonMoves         = "pogo:pokemon_moves"
 	KeyPokemonTypes         = "pogo:pokemon_types"
 	KeyTypeEffectiveness    = "pogo:type_effectiveness"
-	KeyPokedex              = "pogo:pokedex"
+	KeyGOImages             = "pogo:go_images"
 	DefaultTTL              = 24 * time.Hour
+	GOImagesTTL             = 14 * 24 * time.Hour
 )
 
 // Cache persists guild settings and API response payloads in Redis.
@@ -79,8 +80,6 @@ func (c *Cache) GetCached(ctx context.Context, key string) ([]byte, error) {
 func (c *Cache) SetCached(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return c.client.Set(ctx, key, value, ttl).Err()
 }
-
-// --- API response cache methods for testing ---
 
 // TTL returns the remaining lifetime of a key.
 func (c *Cache) TTL(ctx context.Context, key string) (time.Duration, error) {
