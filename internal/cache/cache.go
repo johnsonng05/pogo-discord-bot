@@ -19,7 +19,7 @@ const (
 	KeyPokemonTypes         = "pogo:pokemon_types"
 	KeyTypeEffectiveness    = "pogo:type_effectiveness"
 	KeyGOImages             = "pogo:go_images"
-	DefaultTTL              = 24 * time.Hour
+	DefaultTTL              = 6 * time.Hour
 	GOImagesTTL             = 14 * 24 * time.Hour
 )
 

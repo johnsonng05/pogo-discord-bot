@@ -14,16 +14,18 @@ import (
 func (h *Handler) Raids(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	tierColors := map[string]int{
-		"Mega Raids":   0xFF00FF, // Purple
-		"6-Star Raids": 0xFF0000, // Red
-		"5-Star Raids": 0xFF0000, // Red
-		"4-Star Raids": 0xFFFF00, // Yellow
-		"3-Star Raids": 0xFFFF00, // Yellow
-		"2-Star Raids": 0x00FF00, // Green
-		"1-Star Raids": 0x00FF00, // Green
+		"Super Mega Raids": 0xFF00FF, // Purple
+		"Mega Raids":       0xFF00FF, // Purple
+		"6-Star Raids":     0xFF0000, // Red
+		"5-Star Raids":     0xFF0000, // Red
+		"4-Star Raids":     0xFFFF00, // Yellow
+		"3-Star Raids":     0xFFFF00, // Yellow
+		"2-Star Raids":     0x00FF00, // Green
+		"1-Star Raids":     0x00FF00, // Green
 	}
 
 	tierOrder := []string{
+		"Super Mega Raids",
 		"Mega Raids",
 		"6-Star Raids",
 		"5-Star Raids",
