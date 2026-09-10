@@ -59,6 +59,11 @@ func (c *Cache) SetAnnouncementChannel(ctx context.Context, guildID, channelID s
 	return c.client.HSet(ctx, announcementChannelsKey, guildID, channelID).Err()
 }
 
+// DeleteAnnouncementChannel removes the mapping for a guild to stop daily posts.
+func (c *Cache) DeleteAnnouncementChannel(ctx context.Context, guildID string) error {
+	return c.client.HDel(ctx, announcementChannelsKey, guildID).Err()
+}
+
 // GetAnnouncementChannel returns the configured channel for one guild.
 func (c *Cache) GetAnnouncementChannel(ctx context.Context, guildID string) (string, error) {
 	return c.client.HGet(ctx, announcementChannelsKey, guildID).Result()

@@ -35,8 +35,13 @@ func TestAnnouncementChannels(t *testing.T) {
 	defer c.Close()
 
 	ctx := context.Background()
-	guildID := "test-guild-1"
+	guildID := "test-guild-announce"
 	channelID := "test-channel-99"
+
+	t.Cleanup(func() {
+		_ = c.DeleteAnnouncementChannel(ctx, guildID)
+	})
+	_ = c.DeleteAnnouncementChannel(ctx, guildID)
 
 	if err := c.SetAnnouncementChannel(ctx, guildID, channelID); err != nil {
 		t.Fatal(err)
@@ -56,6 +61,23 @@ func TestAnnouncementChannels(t *testing.T) {
 	}
 	if all[guildID] != channelID {
 		t.Fatalf("HGETALL: got %v", all)
+	}
+
+	if err := c.DeleteAnnouncementChannel(ctx, guildID); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.GetAnnouncementChannel(ctx, guildID)
+	if !errors.Is(err, redis.Nil) {
+		t.Fatalf("expected redis.Nil after delete, got %v", err)
+	}
+
+	all, err = c.ListAnnouncementChannels(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := all[guildID]; ok {
+		t.Fatalf("expected guild removed from hash, got %v", all)
 	}
 }
 
