@@ -10,13 +10,13 @@ Recently, I was encouraged by a friend to play Pokemon Go over the summer. I'd n
 
 ### Slash commands
 
-| Command                      | Description                                                               |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| `/pogo-current-events`       | Live Pokémon GO events                                                    |
-| `/pogo-upcoming-events`      | Upcoming events (capped at 10)                                            |
-| `/pogo-raids`                | Current raid bosses by tier                                               |
-| `/pokemon-lookup`            | Pokémon stats, types, moves, and GO icon                                  |
-| `/pogo-set-announce-channel`  | Server admins set the daily announcement channel (requires Manage Server)  |
+| Command                       | Description                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------- |
+| `/pogo-current-events`        | Live Pokémon GO events                                                          |
+| `/pogo-upcoming-events`       | Upcoming events (capped at 10)                                                  |
+| `/pogo-raids`                 | Current raid bosses by tier                                                     |
+| `/pokemon-lookup`             | Pokémon stats, types, moves, and GO icon                                        |
+| `/pogo-set-announce-channel`  | Server admins set the daily announcement channel (requires Manage Server)       |
 | `/pogo-stop-announce-channel` | Server admins stop daily announcements for this server (requires Manage Server) |
 
 ### Background jobs
@@ -222,8 +222,8 @@ aws ecr get-login-password --region YOUR_REGION \
 docker pull \
   YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/pogo-discord-bot:manual-test
 
-docker stop pogo-bot
-docker rm pogo-bot
+docker stop pogo-discord-bot
+docker rm pogo-discord-bot
 
 docker run -d \
   --name pogo-discord-bot \
