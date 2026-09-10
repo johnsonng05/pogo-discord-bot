@@ -10,11 +10,12 @@ import (
 // Command names registered with Discord. Keep these stable — changing a name
 // after users have the command in their client is a breaking change.
 const (
-	NameCurrentEvents      = "pogo-current-events"
-	NameUpcomingEvents     = "pogo-upcoming-events"
-	NameRaids              = "pogo-raids"
-	NameLookup             = "pokemon-lookup"
-	NameSetAnnounceChannel = "pogo-set-announce-channel"
+	NameCurrentEvents       = "pogo-current-events"
+	NameUpcomingEvents      = "pogo-upcoming-events"
+	NameRaids               = "pogo-raids"
+	NameLookup              = "pokemon-lookup"
+	NameSetAnnounceChannel  = "pogo-set-announce-channel"
+	NameStopAnnounceChannel = "pogo-stop-announce-channel"
 )
 
 // Handler owns slash-command definitions and interaction routing.
@@ -58,7 +59,12 @@ func (h *Handler) Definitions() []*discordgo.ApplicationCommand {
 		},
 		{
 			Name:                     NameSetAnnounceChannel,
-			Description:              "Set this channel as the daily 8 AM announcement channel",
+			Description:              "Set this channel as the daily 10 AM PT announcement channel",
+			DefaultMemberPermissions: &[]int64{discordgo.PermissionManageServer}[0],
+		},
+		{
+			Name:                     NameStopAnnounceChannel,
+			Description:              "Stop daily announcements from posting in this server",
 			DefaultMemberPermissions: &[]int64{discordgo.PermissionManageServer}[0],
 		},
 	}
@@ -95,5 +101,7 @@ func (h *Handler) Route(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		h.Lookup(s, i)
 	case NameSetAnnounceChannel:
 		h.SetAnnounceChannel(s, i)
+	case NameStopAnnounceChannel:
+		h.StopAnnounceChannel(s, i)
 	}
 }
