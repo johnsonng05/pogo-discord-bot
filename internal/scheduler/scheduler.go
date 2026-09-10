@@ -17,9 +17,8 @@ import (
 
 // TODO: Add raids to the scheduler
 // TODO: Refactor shared event helpers into one package
-// TODO: Load per-guild channels from Redis at post time
 
-// TargetHour is local server time for the daily announcement (README: 08:00 AM).
+// TargetHour is local server time for the daily announcement (README: 10:00 AM PT).
 const (
 	layout   = "2006-01-02T15:04:05.000"
 	timezone = "America/Los_Angeles"
@@ -29,7 +28,6 @@ const (
 // It must not block the interactive slash-command pipeline.
 type Scheduler struct {
 	Session    *discordgo.Session
-	ChannelID  string
 	API        *api.Client
 	stop       chan struct{}
 	stopOnce   sync.Once
@@ -37,10 +35,9 @@ type Scheduler struct {
 	Cache      *cache.Cache
 }
 
-func New(session *discordgo.Session, channelID string, client *api.Client, rdb *cache.Cache) *Scheduler {
+func New(session *discordgo.Session, client *api.Client, rdb *cache.Cache) *Scheduler {
 	return &Scheduler{
 		Session:    session,
-		ChannelID:  channelID,
 		API:        client,
 		stop:       make(chan struct{}),
 		TargetHour: 10,
@@ -165,25 +162,23 @@ func (s *Scheduler) postDaily(channels []string) {
 func (s *Scheduler) announcementChannels() []string {
 	seen := make(map[string]struct{})
 	var channels []string
-	if s.Cache != nil {
-		announcementChannels, err := s.Cache.ListAnnouncementChannels(context.Background())
-		if err != nil {
-			log.Printf("scheduler: list announcement channels: %v", err)
-		} else {
-			for _, channelID := range announcementChannels {
-				if channelID == "" {
-					continue
-				}
-				if _, ok := seen[channelID]; ok {
-					continue
-				}
-				seen[channelID] = struct{}{}
-				channels = append(channels, channelID)
-			}
-		}
+	if s.Cache == nil {
+		return channels
 	}
-	if len(channels) == 0 && s.ChannelID != "" {
-		channels = append(channels, s.ChannelID)
+	announcementChannels, err := s.Cache.ListAnnouncementChannels(context.Background())
+	if err != nil {
+		log.Printf("scheduler: list announcement channels: %v", err)
+		return channels
+	}
+	for _, channelID := range announcementChannels {
+		if channelID == "" {
+			continue
+		}
+		if _, ok := seen[channelID]; ok {
+			continue
+		}
+		seen[channelID] = struct{}{}
+		channels = append(channels, channelID)
 	}
 	return channels
 }

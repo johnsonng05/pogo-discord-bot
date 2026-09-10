@@ -14,7 +14,7 @@ import (
 
 // Bot is the long-lived Discord session plus the two engines from the README:
 //  1. Interactive Event Pipeline  — slash-command routing
-//  2. Autonomous Background Routine — daily 08:00 announcement ticker
+//  2. Autonomous Background Routine — daily 10:00 AM PT announcement ticker
 type Bot struct {
 	Session   *discordgo.Session
 	Config    *config.Config
@@ -44,7 +44,7 @@ func New(cfg *config.Config) (*Bot, error) {
 		Config:    cfg,
 		Commands:  cmds,
 		Session:   session,
-		Scheduler: scheduler.New(session, cfg.AnnouncementChannelID, client, rdb),
+		Scheduler: scheduler.New(session, client, rdb),
 		Cache:     rdb,
 	}
 

@@ -11,23 +11,21 @@ import (
 )
 
 // Config holds process-level settings loaded from the environment.
-// See README.md → "Environment Configuration Matrix".
 type Config struct {
-	DiscordToken          string
-	AnnouncementChannelID string
-	RedisURL              string
+	DiscordToken string
+	RedisURL     string
 }
 
-// Load reads DISCORD_TOKEN, ANNOUNCEMENT_CHANNEL_ID, and REDIS_URL.
+// Load reads DISCORD_TOKEN and REDIS_URL (local) or SSM (production).
+// Daily announce channels are configured per guild via slash commands in Redis.
 func Load() (*Config, error) {
 	appEnv := os.Getenv("APP_ENV")
 
 	// Local development only
 	if appEnv == "development" {
 		cfg := &Config{
-			DiscordToken:          os.Getenv("DISCORD_TOKEN"),
-			AnnouncementChannelID: os.Getenv("ANNOUNCEMENT_CHANNEL_ID"),
-			RedisURL:              os.Getenv("REDIS_URL"),
+			DiscordToken: os.Getenv("DISCORD_TOKEN"),
+			RedisURL:     os.Getenv("REDIS_URL"),
 		}
 
 		if cfg.DiscordToken == "" {
@@ -41,7 +39,6 @@ func Load() (*Config, error) {
 	}
 
 	// Production — pull from AWS Parameter Store.
-
 	cfg := &Config{}
 
 	ctx := context.Background()
@@ -56,12 +53,6 @@ func Load() (*Config, error) {
 		return nil, errors.New("failed to retrieve bot token: " + err.Error())
 	}
 	cfg.DiscordToken = token
-
-	channelID, err := fetchAWSParameter(ctx, ssmClient, "/prod/discord/announcement_channel_id")
-	if err != nil {
-		return nil, errors.New("failed to retrieve channel ID: " + err.Error())
-	}
-	cfg.AnnouncementChannelID = channelID
 
 	redisURL, err := fetchAWSParameter(ctx, ssmClient, "/prod/discord/redis_url")
 	if err != nil {
