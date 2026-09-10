@@ -16,12 +16,13 @@ Recently, I was encouraged by a friend to play Pokemon Go over the summer. I'd n
 | `/pogo-upcoming-events`      | Upcoming events (capped at 10)                                            |
 | `/pogo-raids`                | Current raid bosses by tier                                               |
 | `/pokemon-lookup`            | Pokémon stats, types, moves, and GO icon                                  |
-| `/pogo-set-announce-channel` | Server admins set the daily announcement channel (requires Manage Server) |
+| `/pogo-set-announce-channel`  | Server admins set the daily announcement channel (requires Manage Server)  |
+| `/pogo-stop-announce-channel` | Server admins stop daily announcements for this server (requires Manage Server) |
 
 ### Background jobs
 
-- **Daily announcements** — a goroutine checks every minute and posts a live-events summary at **8:00 AM PT** to channels configured in Redis (or `ANNOUNCEMENT_CHANNEL_ID` as a fallback).
-- **Redis caching** — community API JSON is cached with a 24-hour TTL to reduce upstream requests.
+- **Daily announcements** — a goroutine checks every minute and posts a live-events summary at **10:00 AM PT** to channels configured in Redis via `/pogo-set-announce-channel`. Use `/pogo-stop-announce-channel` to turn them off for a server. There is no env/SSM channel fallback.
+- **Redis caching** — community API JSON is cached with a TTL to reduce upstream requests. Morning refresh deletes `pogo:events` and `pogo:raids` once per day at announcement time so slash commands and the daily post see live data.
 
 ## Data Sources
 
@@ -59,14 +60,15 @@ No code changes between environments — only the connection URL differs.
 
 Copy `.env.example` to `.env` and fill in your values:
 
-| Variable                  | Required    | Description                                                                       |
-| ------------------------- | ----------- | --------------------------------------------------------------------------------- |
-| `APP_ENV`                 | Yes (local) | Set to `development` for local env vars; leave **unset** in production (SSM path) |
-| `DISCORD_TOKEN`           | Yes (local) | Bot token from the Discord Developer Portal                                       |
-| `REDIS_URL`               | Yes (local) | e.g. `redis://127.0.0.1:6379/0`                                                   |
-| `ANNOUNCEMENT_CHANNEL_ID` | No          | Fallback channel for daily posts if no guild has run `/pogo-set-announce-channel` |
+| Variable        | Required    | Description                                                                       |
+| --------------- | ----------- | --------------------------------------------------------------------------------- |
+| `APP_ENV`       | Yes (local) | Set to `development` for local env vars; leave **unset** in production (SSM path) |
+| `DISCORD_TOKEN` | Yes (local) | Bot token from the Discord Developer Portal                                       |
+| `REDIS_URL`     | Yes (local) | e.g. `redis://127.0.0.1:6379/0`                                                   |
 
-Local: `APP_ENV=development` loads secrets from `.env`. Production: leave `APP_ENV` unset so `config.Load()` reads SSM Parameter Store.
+Daily announce channels are **not** env/SSM config — use `/pogo-set-announce-channel` / `/pogo-stop-announce-channel` (stored in Redis).
+
+Local: `APP_ENV=development` loads secrets from `.env`. Production: leave `APP_ENV` unset so `config.Load()` reads SSM Parameter Store (`/prod/discord/bot_token`, `/prod/discord/redis_url`).
 
 ## Local development
 
@@ -99,10 +101,11 @@ Start Redis, then:
 ```bash
 export DISCORD_TOKEN="your-bot-token"
 export REDIS_URL="redis://127.0.0.1:6379/0"
-# optional: export ANNOUNCEMENT_CHANNEL_ID="your-channel-id"
 
 go run .
 ```
+
+Then in Discord, run `/pogo-set-announce-channel` in the channel that should get daily posts.
 
 ### Tests
 
@@ -116,7 +119,7 @@ Redis tests (requires `REDIS_URL`):
 
 ```bash
 export REDIS_URL=redis://127.0.0.1:6379/0
-go test ./internal/cache/ ./internal/api/ -run 'TTL|Expire|CachesWith' -v
+go test ./internal/cache/ ./internal/api/ -run 'Announcement|TTL|Expire|CachesWith|GOImage' -v
 ```
 
 ## Discord setup
@@ -134,23 +137,29 @@ User runs a command → bot defers the interaction → fetches data (Redis cache
 
 ### Daily announcement scheduler
 
-A background goroutine wakes every minute. At 8:00 AM PT it loads announcement channel IDs from Redis, fetches live events once, and posts the daily brief to each channel.
+A background goroutine wakes every minute. At **10:00 AM PT** it:
+
+1. Refreshes live schedule caches (`pogo:events`, `pogo:raids`)
+2. Loads announcement channel IDs from Redis (`announcement:channels`)
+3. Fetches live events once and posts the daily brief to each channel
+
+If no guild has run `/pogo-set-announce-channel`, nothing is posted. `/pogo-stop-announce-channel` removes that guild’s Redis mapping.
 
 ### Redis keys
 
-| Key                       | Type         | Purpose                 |
-| ------------------------- | ------------ | ----------------------- |
-| `announcement:channels`   | Hash         | `guildID` → `channelID` |
-| `pogo:events`             | String + TTL | Cached events JSON      |
-| `pogo:raids`              | String + TTL | Cached raids JSON       |
-| `pogo:pokemon_stats`      | String + TTL | Cached stats JSON       |
-| `pogo:pokemon_moves`      | String + TTL | Cached moves JSON       |
-| `pogo:pokemon_types`      | String + TTL | Cached types JSON       |
-| `pogo:type_effectiveness` | String + TTL | Cached matchup JSON     |
+| Key                       | Type         | Purpose                                           |
+| ------------------------- | ------------ | ------------------------------------------------- |
+| `announcement:channels`   | Hash         | `guildID` → `channelID`                           |
+| `pogo:events`             | String + TTL | Cached events JSON                                |
+| `pogo:raids`              | String + TTL | Cached raids JSON                                 |
+| `pogo:pokemon_stats`      | String + TTL | Cached stats JSON                                 |
+| `pogo:pokemon_moves`      | String + TTL | Cached moves JSON                                 |
+| `pogo:pokemon_types`      | String + TTL | Cached types JSON                                 |
+| `pogo:type_effectiveness` | String + TTL | Cached matchup JSON                               |
 | `pogo:go_images`          | String + TTL | Slim name→form→GO icon URL map (not full pokedex) |
 
-Default TTL: **24 hours** (events, raids, stats, etc.).  
-`pogo:go_images` TTL: **30 days** (icon URLs change rarely).
+Default TTL: **6 hours** (events, raids, stats, etc.).  
+`pogo:go_images` TTL: **14 days** (icon URLs change rarely).
 
 ## Project structure
 
@@ -163,7 +172,7 @@ pogo-bot/
 │   ├── commands/     # Slash command handlers
 │   ├── config/       # Env + AWS SSM loading
 │   ├── models/       # JSON struct types
-│   └── scheduler/    # Daily 8 AM announcements
+│   └── scheduler/    # Daily 10 AM PT announcements
 ├── docker-compose.yml
 ├── Dockerfile
 ├── main.go
@@ -236,9 +245,9 @@ Do **not** pass `APP_ENV`, `DISCORD_TOKEN`, or `REDIS_URL` on EC2. Secrets come 
 ## Roadmap
 
 - [x] Slash commands: events, raids, lookup
-- [x] Daily announcement scheduler (8 AM PT)
-- [x] Per-guild announcement channels via Redis
-- [x] Redis API caching (24h TTL)
+- [x] Daily announcement scheduler (10 AM PT)
+- [x] Per-guild announcement channels via Redis (`set` / `stop` slash commands)
+- [x] Redis API caching (6h TTL; slim GO images 14d)
 - [x] Dockerfile and Docker Compose
 - [x] Deploy to AWS EC2
 - [ ] Type effectiveness in `/pokemon-lookup`
