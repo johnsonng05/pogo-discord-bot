@@ -55,6 +55,12 @@ func (h *Handler) Definitions() []*discordgo.ApplicationCommand {
 					Description: "The Pokemon to lookup",
 					Required:    true,
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "form",
+					Description: "The form of the Pokemon to lookup",
+					Required:    false,
+				},
 			},
 		},
 		{
