@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"pogo-discord-bot/internal/cache"
 	"pogo-discord-bot/internal/models"
+	"slices"
 	"strings"
 	"time"
 
@@ -203,10 +204,16 @@ func (c *Client) FetchGOImages() (map[string]map[string]string, error) {
 }
 
 // findStatsByName finds the first Normal form of the given Pokémon name.
-func findStatsByName(stats []models.PokemonStats, name string) (*models.PokemonStats, bool) {
+func findStatsByName(stats []models.PokemonStats, name string, form string) (*models.PokemonStats, bool) {
 	var firstMatch *models.PokemonStats
 	for i := range stats {
 		if !strings.EqualFold(stats[i].PokemonName, name) {
+			continue
+		}
+		if form != "" {
+			if strings.EqualFold(stats[i].Form, form) {
+				return &stats[i], true
+			}
 			continue
 		}
 		if stats[i].Form == "Normal" {
@@ -220,6 +227,21 @@ func findStatsByName(stats []models.PokemonStats, name string) (*models.PokemonS
 		return firstMatch, true
 	}
 	return nil, false
+}
+
+// formsForName returns a list of all forms for the given Pokémon name.
+func formsByName(stats []models.PokemonStats, name string) []string {
+	forms := []string{}
+	for i := range stats {
+		if !strings.EqualFold(stats[i].PokemonName, name) {
+			continue
+		}
+		if !slices.Contains(forms, stats[i].Form) {
+			forms = append(forms, stats[i].Form)
+		}
+	}
+	slices.Sort(forms)
+	return forms
 }
 
 // findMoves finds the first match of the given Pokémon name, ID, and form.
@@ -294,7 +316,7 @@ func grabGOImage(images map[string]map[string]string, name string, form string) 
 	return forms["normal"]
 }
 
-func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
+func (c *Client) LookupPokemon(name string, form string) (*models.PokemonProfile, error) {
 	pokemonStats, err := c.FetchPokemonStats()
 	if err != nil {
 		return nil, err
@@ -312,8 +334,15 @@ func (c *Client) LookupPokemon(name string) (*models.PokemonProfile, error) {
 		return nil, err
 	}
 
-	pokemon, ok := findStatsByName(pokemonStats, name)
+	pokemon, ok := findStatsByName(pokemonStats, name, form)
 	if !ok {
+		availableForms := formsByName(pokemonStats, name)
+		if form != "" {
+			return nil, fmt.Errorf(
+				"Form %q was not found for %s. \nAvailable forms: %s",
+				form, name, strings.Join(availableForms, ", "),
+			)
+		}
 		return nil, fmt.Errorf("stats not found for %s", name)
 	}
 	move, ok := c.findMoves(pokemonMoves, pokemon.PokemonName, pokemon.PokemonID, pokemon.Form)

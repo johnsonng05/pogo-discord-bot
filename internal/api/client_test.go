@@ -101,7 +101,7 @@ func TestFetchTypeEffectiveness(t *testing.T) {
 
 func TestLookupPokemon(t *testing.T) {
 	client := New(nil) // nil cache — live HTTP tests skip Redis
-	pokemonProfile, err := client.LookupPokemon("Pikachu")
+	pokemonProfile, err := client.LookupPokemon("Pikachu", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,8 +135,12 @@ func TestBuildGOImageMapAndGrab(t *testing.T) {
 	fall := "FALL_2019"
 	entries := []models.PokedexAPIEntry{
 		{
-			Names:  struct{ English string `json:"English"` }{English: "Pikachu"},
-			Assets: struct{ Image string `json:"image"` }{Image: "https://example.com/pikachu.png"},
+			Names: struct {
+				English string `json:"English"`
+			}{English: "Pikachu"},
+			Assets: struct {
+				Image string `json:"image"`
+			}{Image: "https://example.com/pikachu.png"},
 			AssetForms: []models.AssetForm{
 				{Form: &fall, Image: "https://example.com/pikachu-fall.png"},
 			},
