@@ -168,39 +168,93 @@ func (c *Client) FetchTypeEffectiveness() (*models.TypeEffectiveness, error) {
 
 // FetchGOImages returns a slim nested map: pokemon name → form → GO icon URL.
 func (c *Client) FetchGOImages() (map[string]map[string]string, error) {
+	if images, ok := c.getCachedGOImages(); ok {
+		return images, nil
+	}
+	images, _, err := c.warmPokedexCaches()
+	return images, err
+}
+
+// FetchMegaForms returns a slim nested map: pokemon name → mega form → MegaForm.
+func (c *Client) FetchMegaForms() (map[string]map[string]models.MegaForm, error) {
+	if megas, ok := c.getCachedMegaForms(); ok {
+		return megas, nil
+	}
+	_, megas, err := c.warmPokedexCaches()
+	return megas, err
+}
+
+func (c *Client) getCachedGOImages() (map[string]map[string]string, bool) {
+	if c.Cache == nil {
+		return nil, false
+	}
 	ctx := context.Background()
-	if c.Cache != nil {
-		cached, err := c.Cache.GetCached(ctx, cache.KeyGOImages)
-		if err == nil {
-			var images map[string]map[string]string
-			if err := json.Unmarshal(cached, &images); err == nil {
-				log.Printf("cache hit %s", cache.KeyGOImages)
-				return images, nil
-			}
-			log.Printf("cache get %s: corrupt payload: %v", cache.KeyGOImages, err)
-			if err := c.Cache.Delete(ctx, cache.KeyGOImages); err != nil {
-				log.Printf("corrupt cache delete %s: %v", cache.KeyGOImages, err)
-			}
-		} else if !errors.Is(err, redis.Nil) {
+	cached, err := c.Cache.GetCached(ctx, cache.KeyGOImages)
+	if err != nil {
+		if !errors.Is(err, redis.Nil) {
 			log.Printf("cache get %s: %v", cache.KeyGOImages, err)
 		}
+		return nil, false
 	}
+	var images map[string]map[string]string
+	if err := json.Unmarshal(cached, &images); err != nil {
+		log.Printf("cache get %s: corrupt payload: %v", cache.KeyGOImages, err)
+		if delErr := c.Cache.Delete(ctx, cache.KeyGOImages); delErr != nil {
+			log.Printf("corrupt cache delete %s: %v", cache.KeyGOImages, delErr)
+		}
+		return nil, false
+	}
+	log.Printf("cache hit %s", cache.KeyGOImages)
+	return images, true
+}
 
-	var entries []models.PokedexAPIEntry
+func (c *Client) getCachedMegaForms() (map[string]map[string]models.MegaForm, bool) {
+	if c.Cache == nil {
+		return nil, false
+	}
+	ctx := context.Background()
+	cached, err := c.Cache.GetCached(ctx, cache.KeyMegaForms)
+	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+			log.Printf("cache get %s: %v", cache.KeyMegaForms, err)
+		}
+		return nil, false
+	}
+	var megas map[string]map[string]models.MegaForm
+	if err := json.Unmarshal(cached, &megas); err != nil {
+		log.Printf("cache get %s: corrupt payload: %v", cache.KeyMegaForms, err)
+		if delErr := c.Cache.Delete(ctx, cache.KeyMegaForms); delErr != nil {
+			log.Printf("corrupt cache delete %s: %v", cache.KeyMegaForms, delErr)
+		}
+		return nil, false
+	}
+	log.Printf("cache hit %s", cache.KeyMegaForms)
+	return megas, true
+}
+
+// warmPokedexCaches downloads pokedex.json once and caches both image and mega maps.
+func (c *Client) warmPokedexCaches() (map[string]map[string]string, map[string]map[string]models.MegaForm, error) {
+	var entries []models.PokedexEntry
 	if err := c.decodeJSON(PokedexAPIURL, &entries); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	images := buildGOImageMap(entries)
+	megas := buildMegaFormMap(entries)
 
 	if c.Cache != nil {
-		payload, err := json.Marshal(images)
-		if err != nil {
+		ctx := context.Background()
+		if payload, err := json.Marshal(images); err != nil {
 			log.Printf("cache marshal %s: %v", cache.KeyGOImages, err)
 		} else if err := c.Cache.SetCached(ctx, cache.KeyGOImages, payload, cache.GOImagesTTL); err != nil {
 			log.Printf("cache set %s: %v", cache.KeyGOImages, err)
 		}
+		if payload, err := json.Marshal(megas); err != nil {
+			log.Printf("cache marshal %s: %v", cache.KeyMegaForms, err)
+		} else if err := c.Cache.SetCached(ctx, cache.KeyMegaForms, payload, cache.MegaFormsTTL); err != nil {
+			log.Printf("cache set %s: %v", cache.KeyMegaForms, err)
+		}
 	}
-	return images, nil
+	return images, megas, nil
 }
 
 // findStatsByName finds the first Normal form of the given Pokémon name.
@@ -229,7 +283,7 @@ func findStatsByName(stats []models.PokemonStats, name string, form string) (*mo
 	return nil, false
 }
 
-// formsForName returns a list of all forms for the given Pokémon name.
+// formsByName returns a list of all forms for the given Pokémon name.
 func formsByName(stats []models.PokemonStats, name string) []string {
 	forms := []string{}
 	for i := range stats {
@@ -242,6 +296,127 @@ func formsByName(stats []models.PokemonStats, name string) []string {
 	}
 	slices.Sort(forms)
 	return forms
+}
+
+// isMegaForm reports whether form is a mega evolution request.
+func isMegaForm(form string) bool {
+	key := normalizeGOImageForm(form)
+	return key == "mega" || strings.HasPrefix(key, "mega_")
+}
+
+// megaFormKeyFromID maps pokedex mega ids like CHARIZARD_MEGA_X → mega_x.
+func megaFormKeyFromID(id string) string {
+	upper := strings.ToUpper(id)
+	switch {
+	case strings.HasSuffix(upper, "_MEGA_X"):
+		return "mega_x"
+	case strings.HasSuffix(upper, "_MEGA_Y"):
+		return "mega_y"
+	case strings.HasSuffix(upper, "_MEGA"):
+		return "mega"
+	default:
+		return ""
+	}
+}
+
+// displayMegaForm turns a normalized key into the pogoapi-style label.
+func displayMegaForm(key string) string {
+	switch key {
+	case "mega_x":
+		return "Mega_X"
+	case "mega_y":
+		return "Mega_Y"
+	case "mega":
+		return "Mega"
+	default:
+		return key
+	}
+}
+
+// buildMegaFormMap reduces megaEvolutions to name → form → MegaForm.
+func buildMegaFormMap(entries []models.PokedexEntry) map[string]map[string]models.MegaForm {
+	megas := make(map[string]map[string]models.MegaForm)
+	for i := range entries {
+		if len(entries[i].MegaEvolutions) == 0 {
+			continue
+		}
+		name := normalizeGOImageName(entries[i].Names.English)
+		if name == "" {
+			continue
+		}
+		forms, ok := megas[name]
+		if !ok {
+			forms = make(map[string]models.MegaForm)
+			megas[name] = forms
+		}
+		for id, mega := range entries[i].MegaEvolutions {
+			key := megaFormKeyFromID(id)
+			if key == "" {
+				key = megaFormKeyFromID(mega.ID)
+			}
+			if key == "" {
+				continue
+			}
+			types := []string{}
+			if mega.PrimaryType.Names.English != "" {
+				types = append(types, mega.PrimaryType.Names.English)
+			}
+			if mega.SecondaryType != nil && mega.SecondaryType.Names.English != "" {
+				types = append(types, mega.SecondaryType.Names.English)
+			}
+			forms[key] = models.MegaForm{
+				Form:        displayMegaForm(key),
+				BaseAttack:  mega.Stats.Attack,
+				BaseDefense: mega.Stats.Defense,
+				BaseStamina: mega.Stats.Stamina,
+				Types:       types,
+				Image:       mega.Assets.Image,
+			}
+		}
+	}
+	return megas
+}
+
+func findMegaForm(megas map[string]map[string]models.MegaForm, name, form string) (models.MegaForm, bool) {
+	forms := megas[normalizeGOImageName(name)]
+	if forms == nil {
+		return models.MegaForm{}, false
+	}
+	mega, ok := forms[normalizeGOImageForm(form)]
+	return mega, ok
+}
+
+func megaFormsByName(megas map[string]map[string]models.MegaForm, name string) []string {
+	forms := megas[normalizeGOImageName(name)]
+	if len(forms) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(forms))
+	for _, mega := range forms {
+		out = append(out, mega.Form)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func availableForms(stats []models.PokemonStats, megas map[string]map[string]models.MegaForm, name string) []string {
+	forms := formsByName(stats, name)
+	for _, mega := range megaFormsByName(megas, name) {
+		if !slices.Contains(forms, mega) {
+			forms = append(forms, mega)
+		}
+	}
+	slices.Sort(forms)
+	return forms
+}
+
+// formatFormsForDisplay replaces underscores so form lists read naturally for users.
+func formatFormsForDisplay(forms []string) string {
+	labels := make([]string, len(forms))
+	for i, form := range forms {
+		labels[i] = strings.ReplaceAll(form, "_", " ")
+	}
+	return strings.Join(labels, ", ")
 }
 
 // findMoves finds the first match of the given Pokémon name, ID, and form.
@@ -274,11 +449,14 @@ func normalizeGOImageForm(form string) string {
 	if form == "" || strings.EqualFold(form, "Normal") {
 		return "normal"
 	}
-	return strings.ToLower(form)
+	form = strings.ToLower(strings.TrimSpace(form))
+	form = strings.ReplaceAll(form, " ", "_")
+	form = strings.ReplaceAll(form, "-", "_")
+	return form
 }
 
 // buildGOImageMap reduces the full pokedex to name → form → icon URL.
-func buildGOImageMap(entries []models.PokedexAPIEntry) map[string]map[string]string {
+func buildGOImageMap(entries []models.PokedexEntry) map[string]map[string]string {
 	images := make(map[string]map[string]string, len(entries))
 	for i := range entries {
 		name := normalizeGOImageName(entries[i].Names.English)
@@ -333,14 +511,22 @@ func (c *Client) LookupPokemon(name string, form string) (*models.PokemonProfile
 	if err != nil {
 		return nil, err
 	}
+	megaForms, err := c.FetchMegaForms()
+	if err != nil {
+		return nil, err
+	}
+
+	if isMegaForm(form) {
+		return c.lookupMegaPokemon(name, form, pokemonStats, pokemonMoves, megaForms)
+	}
 
 	pokemon, ok := findStatsByName(pokemonStats, name, form)
 	if !ok {
-		availableForms := formsByName(pokemonStats, name)
+		forms := availableForms(pokemonStats, megaForms, name)
 		if form != "" {
 			return nil, fmt.Errorf(
 				"Form %q was not found for %s. \nAvailable forms: %s",
-				form, name, strings.Join(availableForms, ", "),
+				form, name, formatFormsForDisplay(forms),
 			)
 		}
 		return nil, fmt.Errorf("stats not found for %s", name)
@@ -359,5 +545,57 @@ func (c *Client) LookupPokemon(name string, form string) (*models.PokemonProfile
 		Moves:   *move,
 		Types:   *types,
 		GOImage: grabGOImage(goImages, pokemon.PokemonName, pokemon.Form),
+	}, nil
+}
+
+func (c *Client) lookupMegaPokemon(name, form string, pokemonStats []models.PokemonStats, pokemonMoves []models.PokemonMoves, megaForms map[string]map[string]models.MegaForm) (*models.PokemonProfile, error) {
+	mega, ok := findMegaForm(megaForms, name, form)
+	if !ok {
+		forms := availableForms(pokemonStats, megaForms, name)
+		return nil, fmt.Errorf(
+			"Form %q was not found for %s. \nAvailable forms: %s",
+			form, name, formatFormsForDisplay(forms),
+		)
+	}
+
+	base, ok := findStatsByName(pokemonStats, name, "")
+	if !ok {
+		return nil, fmt.Errorf("stats not found for %s", name)
+	}
+
+	// Megas share the base species moveset in GO; use Normal moves.
+	move, ok := c.findMoves(pokemonMoves, base.PokemonName, base.PokemonID, "Normal")
+	if !ok {
+		move, ok = c.findMoves(pokemonMoves, base.PokemonName, base.PokemonID, base.Form)
+		if !ok {
+			return nil, fmt.Errorf("moves not found for %s", name)
+		}
+	}
+
+	return &models.PokemonProfile{
+		Stats: models.PokemonStats{
+			PokemonName: base.PokemonName,
+			PokemonID:   base.PokemonID,
+			BaseAttack:  mega.BaseAttack,
+			BaseDefense: mega.BaseDefense,
+			BaseStamina: mega.BaseStamina,
+			Form:        mega.Form,
+		},
+		Moves: models.PokemonMoves{
+			PokemonName:       move.PokemonName,
+			PokemonID:         move.PokemonID,
+			Form:              mega.Form,
+			ChargedMoves:      move.ChargedMoves,
+			FastMoves:         move.FastMoves,
+			EliteChargedMoves: move.EliteChargedMoves,
+			EliteFastMoves:    move.EliteFastMoves,
+		},
+		Types: models.PokemonTypes{
+			PokemonName: base.PokemonName,
+			PokemonID:   base.PokemonID,
+			Form:        mega.Form,
+			Type:        mega.Types,
+		},
+		GOImage: mega.Image,
 	}, nil
 }

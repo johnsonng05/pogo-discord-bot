@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -133,7 +134,7 @@ func TestLookupPokemon(t *testing.T) {
 
 func TestBuildGOImageMapAndGrab(t *testing.T) {
 	fall := "FALL_2019"
-	entries := []models.PokedexAPIEntry{
+	entries := []models.PokedexEntry{
 		{
 			Names: struct {
 				English string `json:"English"`
@@ -165,6 +166,113 @@ func TestBuildGOImageMapAndGrab(t *testing.T) {
 	}
 }
 
+func TestBuildMegaFormMap(t *testing.T) {
+	const raw = `[
+		{
+			"names": {"English": "Charizard"},
+			"megaEvolutions": {
+				"CHARIZARD_MEGA_X": {
+					"id": "CHARIZARD_MEGA_X",
+					"stats": {"attack": 273, "defense": 213, "stamina": 186},
+					"primaryType": {"names": {"English": "Fire"}},
+					"secondaryType": {"names": {"English": "Dragon"}},
+					"assets": {"image": "https://example.com/charizard-megax.png"}
+				},
+				"CHARIZARD_MEGA_Y": {
+					"id": "CHARIZARD_MEGA_Y",
+					"stats": {"attack": 319, "defense": 212, "stamina": 186},
+					"primaryType": {"names": {"English": "Fire"}},
+					"secondaryType": {"names": {"English": "Flying"}},
+					"assets": {"image": "https://example.com/charizard-megay.png"}
+				}
+			}
+		},
+		{
+			"names": {"English": "Venusaur"},
+			"megaEvolutions": {
+				"VENUSAUR_MEGA": {
+					"id": "VENUSAUR_MEGA",
+					"stats": {"attack": 241, "defense": 246, "stamina": 190},
+					"primaryType": {"names": {"English": "Grass"}},
+					"secondaryType": {"names": {"English": "Poison"}},
+					"assets": {"image": "https://example.com/venusaur-mega.png"}
+				}
+			}
+		}
+	]`
+	var entries []models.PokedexEntry
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		t.Fatal(err)
+	}
+
+	megas := buildMegaFormMap(entries)
+	x, ok := findMegaForm(megas, "Charizard", "Mega_X")
+	if !ok {
+		t.Fatal("expected Mega_X for Charizard")
+	}
+	if x.Form != "Mega_X" || x.BaseAttack != 273 || x.BaseDefense != 213 || x.BaseStamina != 186 {
+		t.Fatalf("Mega_X stats: %+v", x)
+	}
+	if len(x.Types) != 2 || x.Types[0] != "Fire" || x.Types[1] != "Dragon" {
+		t.Fatalf("Mega_X types: %#v", x.Types)
+	}
+	if x.Image == "" {
+		t.Fatal("expected Mega_X image")
+	}
+
+	if _, ok := findMegaForm(megas, "Charizard", "mega x"); !ok {
+		t.Fatal("expected spaced mega x to normalize")
+	}
+	if _, ok := findMegaForm(megas, "Venusaur", "Mega"); !ok {
+		t.Fatal("expected Mega for Venusaur")
+	}
+	if _, ok := findMegaForm(megas, "Pikachu", "Mega"); ok {
+		t.Fatal("unexpected mega for Pikachu")
+	}
+}
+
+func TestFormatFormsForDisplay(t *testing.T) {
+	got := formatFormsForDisplay([]string{"Normal", "Fall_2019", "Mega_X", "Copy_2019"})
+	want := "Normal, Fall 2019, Mega X, Copy 2019"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestLookupPokemonMega(t *testing.T) {
+	client := New(nil)
+	profile, err := client.LookupPokemon("Charizard", "Mega_X")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Stats.Form != "Mega_X" {
+		t.Fatalf("form: got %q", profile.Stats.Form)
+	}
+	if profile.Stats.PokemonID != 6 || profile.Stats.PokemonName != "Charizard" {
+		t.Fatalf("identity: %+v", profile.Stats)
+	}
+	if profile.Stats.BaseAttack < 250 {
+		t.Fatalf("expected mega attack boost, got %d", profile.Stats.BaseAttack)
+	}
+	if len(profile.Types.Type) == 0 {
+		t.Fatal("expected mega types")
+	}
+	if len(profile.Moves.FastMoves) == 0 || len(profile.Moves.ChargedMoves) == 0 {
+		t.Fatal("expected base moves on mega profile")
+	}
+	if profile.Moves.Form != "Mega_X" {
+		t.Fatalf("moves form: got %q", profile.Moves.Form)
+	}
+	if profile.GOImage == "" {
+		t.Fatal("expected mega image")
+	}
+
+	_, err = client.LookupPokemon("Pikachu", "Mega")
+	if err == nil {
+		t.Fatal("expected error for Pikachu Mega")
+	}
+}
+
 func TestFetchGOImagesCachesSlimPayload(t *testing.T) {
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {
@@ -178,10 +286,10 @@ func TestFetchGOImagesCachesSlimPayload(t *testing.T) {
 	defer rdb.Close()
 
 	ctx := context.Background()
-	if err := rdb.Delete(ctx, cache.KeyGOImages); err != nil {
+	if err := rdb.Delete(ctx, cache.KeyGOImages, cache.KeyMegaForms); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = rdb.Delete(ctx, cache.KeyGOImages) })
+	t.Cleanup(func() { _ = rdb.Delete(ctx, cache.KeyGOImages, cache.KeyMegaForms) })
 
 	client := New(rdb)
 	images, err := client.FetchGOImages()
@@ -203,6 +311,17 @@ func TestFetchGOImagesCachesSlimPayload(t *testing.T) {
 	const maxBytes = 2 * 1024 * 1024
 	if len(cached) > maxBytes {
 		t.Fatalf("cached go_images too large: %d bytes (limit %d)", len(cached), maxBytes)
+	}
+
+	megaCached, err := rdb.GetCached(ctx, cache.KeyMegaForms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(megaCached) == 0 {
+		t.Fatal("expected mega_forms to be warmed with go_images")
+	}
+	if len(megaCached) > maxBytes {
+		t.Fatalf("cached mega_forms too large: %d bytes (limit %d)", len(megaCached), maxBytes)
 	}
 
 	again, err := client.FetchGOImages()
