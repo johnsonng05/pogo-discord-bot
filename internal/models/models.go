@@ -79,22 +79,6 @@ type PokemonProfile struct {
 	GOImage string // GO icon URL from slim pogo:go_images cache (name → form → url).
 }
 
-// PokedexAPIEntry is one species from pokemon-go-api (gamemaster + asset URLs).
-type PokedexAPIEntry struct {
-	Names struct {
-		English string `json:"English"`
-	} `json:"names"`
-	Assets struct {
-		Image string `json:"image"`
-	} `json:"assets"`
-	AssetForms []AssetForm `json:"assetForms"`
-}
-
-type AssetForm struct {
-	Form  *string `json:"form"`
-	Image string  `json:"image"`
-}
-
 // TypeEffectiveness is the type-matchup matrix.
 
 type TypeEffectiveness map[string]map[string]float64
