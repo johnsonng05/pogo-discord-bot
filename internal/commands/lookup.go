@@ -19,7 +19,7 @@ func (h *Handler) Lookup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	var targetPokemon, targetForm string
 	for _, option := range i.ApplicationCommandData().Options {
 		switch option.Name {
-		case "pokemon-name":
+		case "name":
 			targetPokemon = option.StringValue()
 		case "form":
 			targetForm = option.StringValue()
