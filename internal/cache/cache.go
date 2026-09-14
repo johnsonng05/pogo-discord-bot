@@ -19,8 +19,10 @@ const (
 	KeyPokemonTypes         = "pogo:pokemon_types"
 	KeyTypeEffectiveness    = "pogo:type_effectiveness"
 	KeyGOImages             = "pogo:go_images"
+	KeyMegaForms            = "pogo:mega_forms"
 	DefaultTTL              = 6 * time.Hour
 	GOImagesTTL             = 14 * 24 * time.Hour
+	MegaFormsTTL            = GOImagesTTL
 )
 
 // Cache persists guild settings and API response payloads in Redis.
