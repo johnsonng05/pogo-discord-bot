@@ -51,14 +51,14 @@ func (h *Handler) Definitions() []*discordgo.ApplicationCommand {
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "pokemon-name",
-					Description: "The Pokemon to lookup",
+					Name:        "name",
+					Description: "Name of the Pokemon to lookup",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "form",
-					Description: "The form of the Pokemon to lookup",
+					Description: "Form (e.g. Normal, Altered, Mega, Mega X, Mega Y)",
 					Required:    false,
 				},
 			},
