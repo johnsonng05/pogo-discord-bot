@@ -15,7 +15,7 @@ Recently, I was encouraged by a friend to play Pokemon Go over the summer. I'd n
 | `/pogo-current-events`        | Live Pokémon GO events                                                          |
 | `/pogo-upcoming-events`       | Upcoming events (capped at 10)                                                  |
 | `/pogo-raids`                 | Current raid bosses by tier                                                     |
-| `/pokemon-lookup`             | Pokémon stats, types, moves, and GO icon                                        |
+| `/pokemon-lookup`             | Pokémon stats, types, moves, and GO icon; optional `form` (Normal, Altered, Mega, etc.) |
 | `/pogo-set-announce-channel`  | Server admins set the daily announcement channel (requires Manage Server)       |
 | `/pogo-stop-announce-channel` | Server admins stop daily announcements for this server (requires Manage Server) |
 
@@ -157,9 +157,10 @@ If no guild has run `/pogo-set-announce-channel`, nothing is posted. `/pogo-stop
 | `pogo:pokemon_types`      | String + TTL | Cached types JSON                                 |
 | `pogo:type_effectiveness` | String + TTL | Cached matchup JSON                               |
 | `pogo:go_images`          | String + TTL | Slim name→form→GO icon URL map (not full pokedex) |
+| `pogo:mega_forms`         | String + TTL | Slim name→mega form→stats map (warmed with GO images) |
 
 Default TTL: **6 hours** (events, raids, stats, etc.).  
-`pogo:go_images` TTL: **14 days** (icon URLs change rarely).
+`pogo:go_images` / `pogo:mega_forms` TTL: **14 days** (change rarely).
 
 ## Project structure
 
@@ -247,11 +248,12 @@ Do **not** pass `APP_ENV`, `DISCORD_TOKEN`, or `REDIS_URL` on EC2. Secrets come 
 - [x] Slash commands: events, raids, lookup
 - [x] Daily announcement scheduler (10 AM PT)
 - [x] Per-guild announcement channels via Redis (`set` / `stop` slash commands)
-- [x] Redis API caching (6h TTL; slim GO images 14d)
+- [x] Redis API caching (6h TTL; slim GO images / mega forms 14d)
 - [x] Dockerfile and Docker Compose
 - [x] Deploy to AWS EC2
+- [x] Optional `form` parameter on `/pokemon-lookup` (Normal, Altered, Mega, etc.)
+- [ ] Discord options autocomplete for Pokémon name and form
 - [ ] Type effectiveness in `/pokemon-lookup`
-- [ ] Optional `form` parameter on lookup (Origin, Altered, etc.)
 - [ ] Raid bosses in daily announcement
 - [ ] GitHub Actions deploy pipeline
 
